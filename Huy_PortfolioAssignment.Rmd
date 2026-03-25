@@ -71,7 +71,7 @@ prices <- na.omit(prices)
 2. Construct an Equal-Weighted Portfolio
 Assuming an initial investment of $1,000, 
 we construct an equal-weighted portfolio 
-where each stock receives the same weight ($w_i = 1/N$).
+where each stock receives the same weight ($w_i$ = $\frac{1}{N}$).
 ```{r}
 initial_investment <- 1000
 n <- length(tickers) # Number of stocks in the portfolio
