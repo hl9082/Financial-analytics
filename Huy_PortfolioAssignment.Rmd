@@ -135,16 +135,15 @@ ggplot(plot_df_long,
 ```
 
 5. Discussion on Portfolio Performance
-(Note: Replace the bracketed text below with your actual observations based on the graph generated above!)
 
 Did diversification reduce volatility?
-- Yes, looking at the graph, diversification definitely helped smooth out the ride.
-- While the aggregate portfolio (the thick blue line) still experiences macroeconomic market dips—like the noticeable drop around the end of 2022—it is noticeably less erratic than some of the individual holdings. For example, ExxonMobil (XOM) had some very sharp spikes and drops throughout the timeline.
-- However, because its movements were combined with the relatively flat, stable trajectory of Johnson & Johnson (JNJ) and the different timing of JPMorgan's (JPM) movements, the overall portfolio's path was smoothed out. 
+Yes, looking at the graph, diversification definitely helped smooth out the ride.
+While the aggregate portfolio (the thick blue line) still experiences macroeconomic market dips—like the noticeable drop around the end of 2022—it is noticeably less erratic than some of the individual holdings. For example, ExxonMobil (XOM) had some very sharp spikes and drops throughout the timeline.
+However, because its movements were combined with the relatively flat, stable trajectory of Johnson & Johnson (JNJ) and the different timing of JPMorgan's (JPM) movements, the overall portfolio's path was smoothed out. 
 
 Did the portfolio perform better than most individual stocks?
-- Visually, the portfolio line is at the top of the chart, but that's because it represents the aggregate sum of my initial $1,000 investment, whereas the individual lines just show the growth of the $200 allocated to each specific stock.
-- If we look at the actual growth rate, the portfolio performed right in the middle, which makes sense for an equal-weighted strategy. The portfolio's overall return was dragged down by underperformers like JNJ and AAPL, but it was boosted by big winners like XOM and JPM. Ultimately, the portfolio didn't beat our best performing individual stocks, but it successfully protected us from the poor returns of our worst performing stocks.
+Visually, the portfolio line is at the top of the chart, but that's because it represents the aggregate sum of my initial $1,000 investment, whereas the individual lines just show the growth of the $200 allocated to each specific stock.
+If we look at the actual growth rate, the portfolio performed right in the middle, which makes sense for an equal-weighted strategy. The portfolio's overall return was dragged down by underperformers like JNJ and AAPL, but it was boosted by big winners like XOM and JPM. Ultimately, the portfolio didn't beat our best performing individual stocks, but it successfully protected us from the poor returns of our worst performing stocks.
 
 ## Part 2: Portfolio Optimization
 1. Efficient Frontier
