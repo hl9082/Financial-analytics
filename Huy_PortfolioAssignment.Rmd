@@ -1,6 +1,6 @@
 ---
 title: "FINC-580 Assignment #1 — Portfolio Returns and Optimization"
-author: "Huy"
+author: "Huy Le (hl9082)"
 date: "`r Sys.Date()`"
 output: 
   html_document:
@@ -12,10 +12,10 @@ output:
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 # Load necessary libraries
 # Check for missing packages and install them if necessary
-# 1. Define the packages you need
+# 1. Define the packages required
 required_packages <- c("quantmod", "PerformanceAnalytics", "ggplot2", "tidyr")
 
-# 2. Check which ones are NOT already installed on your computer
+# 2. Check which ones are NOT already installed
 new_packages <- required_packages[
                                   !(required_packages %in%
                                       installed.packages()[, "Package"])]
@@ -34,29 +34,21 @@ library(ggplot2)
 library(tidyr)
 ```
 ### Assignment Overview
-This assignment introduces portfolio construction, 
-return calculation, and optimization. 
-We collect real-world stock price data to 
-construct an equal-weighted portfolio 
-and analyze its performance 
-under a buy-and-hold strategy. 
-We also explore modern portfolio theory by 
-plotting the efficient frontier, 
-identifying the minimum-variance portfolio, 
-and determining the optimal risky portfolio.
+- This assignment introduces portfolio construction, return calculation, and optimization. 
+- We collect real-world stock price data to construct an equal-weighted portfolio and analyze its performance under a buy-and-hold strategy. 
+- In the second phase, we move from static evaluation to portfolio optimization by mapping the efficient frontier, locating the global minimum-variance portfolio, and identifying the optimal risky (tangency) portfolio that maximizes the risk premium.
 
-# Part 1: Portfolio Return Calculation
+## Part 1: Portfolio Return Calculation
 1. Stock Selection & Data Collection
-We selected five publicly traded stocks across different sectors. 
-We use the quantmod package to download adjusted 
-closing prices from January 2021 to September 2025.
+- We selected five publicly traded stocks across different sectors to ensure a baseline level of non-systematic risk diversification. 
+- We use the quantmod package to download adjusted closing prices from January 2021 to September 2025. Adjusted prices are crucial for historical performance analysis because they mathematically account for corporate actions (like stock splits and dividend distributions), providing a strictly accurate reflection of total return.
 ```{r}
 # Define 5 stock tickers
 tickers <- c("AAPL", "MSFT", "JNJ", "XOM", "JPM")
 start_date <- "2021-01-01"
 end_date <- "2025-09-30"
 
-# Download adjusted closing prices
+# Download adjusted closing prices using quantmod::getSymbols()
 getSymbols(tickers,
            src = "yahoo",
            from = start_date,
@@ -64,14 +56,13 @@ getSymbols(tickers,
            periodicity = "monthly")
 
 # Combine adjusted prices into one xts object and rename columns
+# to capture true total returns
 prices <- do.call(merge, lapply(tickers, function(x) Ad(get(x))))
-colnames(prices) <- tickers
-prices <- na.omit(prices)
+colnames(prices) <- tickers # rename columns to match tickers
+prices <- na.omit(prices) # remove any rows with missing values
 ```
 2. Construct an Equal-Weighted Portfolio
-Assuming an initial investment of $1,000, 
-we construct an equal-weighted portfolio 
-where each stock receives the same weight ($w_i$ = $\frac{1}{N}$).
+- Assuming an initial investment of \$1,000, we construct an equal-weighted portfolio where each stock receives the same weight ($w_i = \frac{1}{N}$).
 ```{r}
 initial_investment <- 1000
 n <- length(tickers) # Number of stocks in the portfolio
@@ -79,18 +70,31 @@ weights <- rep(1 / n, n) # Each stock receives the same weight
 ```
 
 3. Portfolio Value Calculation (Buy-and-Hold)
-We calculate the portfolio value at the end of each month. 
-Under a buy-and-hold strategy, the portfolio is not rebalanced, and 
-the initial weights remain fixed. We compute the returns using matrix multiplication.
+- A strict buy-and-hold strategy implies zero rebalancing. While the initial capital allocation is equal, the effective portfolio weights will naturally drift over time as the underlying asset prices diverge.
+- To model this dynamically without iterative loops, we establish the fixed number of shares purchased on day one. By multiplying the historical price matrix by this constant share vector, we isolate the true, un-rebalanced portfolio value at any given time $t$.
 ```{r}
 # Determine the exact number of shares bought on day 1
 first_prices <- as.numeric(prices[1, ])
+
+# Determine the fixed fractional shares purchased for each asset
 shares_bought <- (initial_investment * weights) / first_prices
+# shares_bought is a numeric vector of number of shares bought for each stock
+# it's calculated by taking initial investment,
+# multiplying by the weight for each stock
+# and dividing by the each stock's price on the first day
 
 # Calculate the portfolio value
 # at the end of each month using matrix multiplication
+# Matrix Multiplication: Price Matrix (T x N) %*% Share Vector (N x 1)
+# This mathematical operation computes the
+# exact aggregate portfolio value at each time T
 portfolio_value <- coredata(prices) %*% shares_bought
+
+# Convert the resulting numeric vector
+# back to a time-series (xts) object for plotting
 portfolio_xts <- xts(portfolio_value, order.by = index(prices))
+
+# name the column 'Portfolio'
 colnames(portfolio_xts) <- "Portfolio"
 
 # Calculate the value of individual stock holdings for comparison plotting
@@ -99,8 +103,7 @@ indiv_xts <- xts(indiv_values, order.by = index(prices))
 ```
 
 4. Plot Portfolio Performance
-Below is the plot of the cumulative return of 
-the equal-weighted portfolio over time, alongside the individual stocks.
+- Below is the plot of the cumulative return of the equal-weighted portfolio over time, alongside the individual stocks.
 ```{r}
 # 1. Ensure the required packages are actively loaded
 library(tidyr)
@@ -131,11 +134,23 @@ ggplot(plot_df_long,
   theme_minimal()
 ```
 
+5. Discussion on Portfolio Performance
+(Note: Replace the bracketed text below with your actual observations based on the graph generated above!)
+
+Did diversification reduce volatility?
+- Yes, looking at the graph, diversification definitely helped smooth out the ride.
+- While the aggregate portfolio (the thick blue line) still experiences macroeconomic market dips—like the noticeable drop around the end of 2022—it is noticeably less erratic than some of the individual holdings. For example, ExxonMobil (XOM) had some very sharp spikes and drops throughout the timeline.
+- However, because its movements were combined with the relatively flat, stable trajectory of Johnson & Johnson (JNJ) and the different timing of JPMorgan's (JPM) movements, the overall portfolio's path was smoothed out. 
+
+Did the portfolio perform better than most individual stocks?
+- Visually, the portfolio line is at the top of the chart, but that's because it represents the aggregate sum of my initial $1,000 investment, whereas the individual lines just show the growth of the $200 allocated to each specific stock.
+- If we look at the actual growth rate, the portfolio performed right in the middle, which makes sense for an equal-weighted strategy. The portfolio's overall return was dragged down by underperformers like JNJ and AAPL, but it was boosted by big winners like XOM and JPM. Ultimately, the portfolio didn't beat our best performing individual stocks, but it successfully protected us from the poor returns of our worst performing stocks.
 
 ## Part 2: Portfolio Optimization
 1. Efficient Frontier
-We select two stocks from different sectors 
-(WMT and NVDA) and use their price data to plot the efficient frontier.
+- We select two stocks from different sectors (WMT and NVDA) and use their price data to plot the efficient frontier.
+- We compute discrete periodic returns. Unlike log returns, discrete returns linearly aggregate across assets ($R_p = \sum w_i R_i$), making them the mathematically correct choice for calculating multi-asset portfolio returns.
+- We scale the monthly expected returns and the covariance matrix by 12 to annualize the metrics, allowing us to interpret the Efficient Frontier in standard annualized terms.
 ```{r}
 # Select two stocks from different sectors and define a custom sample period
 tickers_opt <- c("WMT", "NVDA")
@@ -144,7 +159,7 @@ getSymbols(tickers_opt,
            from = "2020-01-01",
            to = "2025-01-01", periodicity = "monthly")
 
-# Merge adjusted prices
+# Extract and merge adjusted prices
 prices_opt <- do.call(merge, lapply(tickers_opt, function(x) Ad(get(x))))
 colnames(prices_opt) <- tickers_opt
 prices_opt <- na.omit(prices_opt)
@@ -157,6 +172,7 @@ mean_rets <- colMeans(rets_opt) * 12
 cov_matrix <- cov(rets_opt) * 12
 
 # Generate a sequence of weight combinations for the two stocks (from 0 to 1)
+# with w1+w2=1
 w1 <- seq(0, 1, by = 0.01)
 w2 <- 1 - w1
 
@@ -172,13 +188,13 @@ frontier_df <- data.frame(Return = port_rets, SD = port_sds, W1 = w1, W2 = w2)
 ```
 
 2. Minimum-Variance and Optimal Risky Portfolio
-Assuming a risk-free rate of 3%, we identify the minimum-variance 
-portfolio and the optimal risky portfolio (the tangency portfolio) 
-and mark them on the efficient frontier.
+- Assuming a risk-free rate of 3%, we identify the minimum-variance portfolio and the optimal risky portfolio (the tangency portfolio) and mark them on the efficient frontier.
+- Global Minimum-Variance: Identifies the specific capital allocation on the extreme left of the frontier that produces the absolute lowest portfolio volatility.
+- Optimal Risky Portfolio: We identify the tangency portfolio by maximizing the Sharpe Ratio ($\frac{E(R_p) - R_f}{\sigma_p}$). Geometrically, this is the exact point where the Capital Allocation Line (CAL) is steepest, providing the investor with the maximum possible risk premium per unit of standard deviation.
 ```{r}
 rf <- 0.03 # Assume a risk-free rate of 3%
 
-# Identify the minimum-variance portfolio
+# Identify the Global Minimum-Variance portfolio
 min_var_idx <- which.min(frontier_df$SD)
 min_var_port <- frontier_df[min_var_idx, ]
 
@@ -199,6 +215,8 @@ ggplot(frontier_df, aes(x = SD, y = Return)) +
              aes(x = SD, y = Return),
              color = "green", size = 4) +
   # Draw the Capital Allocation Line (CAL)
+  # The CAL originates at the Risk-Free Rate and tangentially 
+  # intersects the efficient frontier
   geom_abline(
               intercept = rf,
               slope = max(sharpe_ratios),
