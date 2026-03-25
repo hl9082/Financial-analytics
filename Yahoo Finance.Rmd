@@ -1,0 +1,186 @@
+---
+title: "Yahoo Finance Intro"
+author: "JQ"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: true
+---
+
+## Overview
+This session covers:
+
+- Import stock price data from Yahoo Finance.
+- Inspect and understand xts objects.
+- Perform basic data manipulation.
+- Normalize prices.
+- Plot capital appreciation of multiple securities.
+
+
+---
+
+## Import stock price data from Yahoo Finance
+
+```{r setup, message=FALSE, warning=FALSE}
+library(quantmod)  # package for financial data and time-series tools
+
+# Download daily data for NVDA from Yahoo Finance
+getSymbols("NVDA", 
+           from = "2019-12-31", 
+           to   = "2024-12-31", 
+           auto.assign = TRUE)
+
+head(NVDA)         # preview first few rows
+class(NVDA)        # check object class
+```
+
+### What is xts?
+
+- An extensible time-series object built on **zoo**.
+- Rows are indexed by time (Date or POSIXct).
+- Very efficient for financial data operations (merging, subsetting by date, rolling windows).
+
+### Common Pitfalls
+
+- Avoid using `$` with xts objects; use `[, "ColumnName"]` instead.
+- Always check the index class before time-based subsetting.
+
+
+---
+
+## Checking the Data Structure
+
+```{r}
+head(NVDA, 3)      # first 3 observations
+tail(NVDA, 3)      # last 3 observations
+dim(NVDA)          # number of rows and columns
+summary(NVDA)      # summary statistics
+```
+
+```{r}
+# Plot closing price
+plot(NVDA[, "NVDA.Close"],
+     main = "NVDA Closing Price",
+     col = "darkblue",
+     lwd = 2)
+```
+
+---
+
+## Basic Data Manipulation
+
+```{r}
+NVDA[1, ]              # first observation
+NVDA[1:5, ]            # first 5 observations
+nrow(NVDA)             # total number of rows
+
+# Select specific rows
+NVDA[c(1, 251), ]
+
+# Extract only Close price column
+close_price <- NVDA[, "NVDA.Close"]
+head(close_price)
+
+# Date-based subsetting (January 2024 only)
+NVDA_2024Jan <- NVDA["2024-01"]
+head(NVDA_2024Jan)
+
+# Logical filtering example
+high_volume_days <- subset(NVDA,
+                           NVDA.Volume > 500000000 &
+                           index(NVDA) >= as.Date("2024-05-01"))
+head(high_volume_days)
+```
+
+---
+
+## Convert to Weekly Prices
+
+```{r}
+# Convert daily data to weekly frequency
+NVDA_weekly <- to.weekly(NVDA)
+
+head(NVDA_weekly)   # weekly OHLC data
+```
+
+---
+
+## Compare Capital Gains Across Multiple Securities
+
+### Download Multiple Stocks
+
+```{r}
+symbols <- c("NVDA", "TSLA", "GOOG", "SPY")
+
+getSymbols(symbols,
+           from = "2019-12-31",
+           to   = "2024-12-31")
+```
+
+---
+
+## Combine and Normalize Prices
+
+```{r}
+# Combine adjusted closing prices
+close.prc <- cbind(NVDA[, "NVDA.Close"],
+                   TSLA[, "TSLA.Close"],
+                   GOOG[, "GOOG.Close"],
+                   SPY[,  "SPY.Close"])
+
+colnames(close.prc) <- symbols
+
+head(close.prc)
+
+# Normalize prices to start at 1 (Value of $1 investment)
+norm.prc <- close.prc
+norm.prc[, "NVDA"] <- close.prc[, "NVDA"] / as.numeric(close.prc[1, "NVDA"])
+norm.prc[, "TSLA"] <- close.prc[, "TSLA"] / as.numeric(close.prc[1, "TSLA"])
+norm.prc[, "GOOG"] <- close.prc[, "GOOG"] / as.numeric(close.prc[1, "GOOG"])
+norm.prc[, "SPY"] <- close.prc[, "SPY"] / as.numeric(close.prc[1, "SPY"])
+head(norm.prc)
+```
+
+---
+
+## Plot Capital Appreciation
+
+```{r}
+y.range <- range(norm.prc)     # determine y-axis range
+dt <- index(norm.prc)          # extract date index
+
+plot(dt, norm.prc[, "NVDA"],
+     type = "l",
+     lwd = 2,
+     col = "black",
+     ylim = y.range,
+     xlab = "Date",
+     ylab = "Value of $1 Investment",
+     main = "Value of $1 Investment: NVDA, TSLA, GOOG, SPY")
+
+lines(dt, norm.prc[, "TSLA"], col = "blue")
+lines(dt, norm.prc[, "GOOG"], col = "red")
+lines(dt, norm.prc[, "SPY"],  col = "darkgreen")
+
+abline(h = 1, lty = 2)  # reference line at initial value
+
+legend("topleft",
+       legend = symbols,
+       col = c("black", "blue", "red", "darkgreen"),
+       lwd = 2)
+```
+
+---
+
+## Key Takeaways
+
+- `quantmod` makes financial data import easy.
+- `xts` objects allow powerful time-based subsetting.
+- Normalizing prices allows meaningful performance comparison.
+- Always use adjusted or closing prices consistently.
+- Visualizing cumulative returns helps interpret capital appreciation.
+
+---
