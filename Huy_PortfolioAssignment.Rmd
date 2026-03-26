@@ -108,42 +108,97 @@ indiv_xts <- xts(indiv_values, order.by = index(prices))
 # 1. Ensure the required packages are actively loaded
 library(tidyr)
 library(ggplot2)
-# Combine portfolio and individual stock values
-plot_data <- merge(portfolio_xts, indiv_xts)
-plot_df <- data.frame(Date = index(plot_data), coredata(plot_data))
+# ==========================================
+# PLOT 1: PORTFOLIO TOTAL VALUE ($1000 BASE)
+# ==========================================
+# We already have portfolio_xts from earlier, let's plot just that.
+port_df <- data.frame(
+                      Date = index(portfolio_xts),
+                      Value = coredata(portfolio_xts))
+colnames(port_df)[2] <- "Value"
 
-# Reshape data to long format for ggplot
-plot_df_long <- pivot_longer(
-                             plot_df,
-                             cols = -Date,
-                             names_to = "Asset",
-                             values_to = "Value")
-
-# Plot cumulative return over time
-ggplot(plot_df_long,
-       aes(x = Date,
-           y = Value,
-           color = Asset,
-           linewidth = Asset == "Portfolio")) +
-  geom_line() +
-  scale_linewidth_manual(values = c("TRUE" = 1.5, "FALSE" = 0.5)) +
-  labs(title = "Buy-and-Hold Portfolio Value vs. Individual Stocks",
+plot1 <- ggplot(port_df, aes(x = Date, y = Value)) +
+  geom_line(color = "blue", linewidth = 1.2) +
+  labs(title = "Buy-and-Hold Portfolio Value",
        subtitle = paste("Initial Investment: $", initial_investment),
        y = "Cumulative Value ($)",
        x = "Date") +
   theme_minimal()
+
+print(plot1)
+
+# ==========================================
+# PLOT 2: VALUE OF $1 INVESTMENT (ALL ASSETS)
+# ==========================================
+# To show a $1 investment, divide all prices by their day 1 price
+dollar_inv_stocks <- sweep(coredata(prices), 2, as.numeric(prices[1, ]), "/")
+
+# Do the same for the portfolio (divide current value by initial $1000)
+dollar_inv_port <- coredata(portfolio_xts) / initial_investment
+
+# Combine into one dataframe
+dollar_data <- cbind(dollar_inv_port, dollar_inv_stocks)
+colnames(dollar_data)[1] <- "Portfolio" # Rename the first column
+dollar_df <- data.frame(Date = index(prices), dollar_data)
+
+# Reshape to long format for ggplot
+dollar_df_long <- pivot_longer(
+  dollar_df,
+  cols = -Date,
+  names_to = "Asset",
+  values_to = "Value"
+)
+
+# Generate the $1 Investment Plot
+plot2 <- ggplot(
+                dollar_df_long, aes(
+                                    x = Date,
+                                    y = Value,
+                                    color = Asset,
+                                    linewidth = Asset == "Portfolio")) +
+  geom_line() +
+  scale_linewidth_manual(values = c("TRUE" = 1.5, "FALSE" = 0.5)) +
+  geom_hline(yintercept = 1,
+             linetype = "dashed",
+             color = "black") + # Adds the $1 baseline from your picture
+  labs(title = "Value of $1 Investment: Portfolio vs Individual Stocks",
+       y = "Value of $1 Investment",
+       x = "Date") +
+  theme_minimal()
+
+print(plot2)
+```
+
+```{r}
+# --- Add this right below your Plotting chunk ---
+
+# Calculate discrete monthly returns using PerformanceAnalytics
+port_returns <- Return.calculate(portfolio_xts, method = "discrete")[-1]
+indiv_returns <- Return.calculate(prices, method = "discrete")[-1]
+
+# Calculate Annualized Volatility using PerformanceAnalytics' built-in function
+# (This automatically scales by sqrt(12) for
+# monthly data and handles matrices perfectly)
+port_vol <- StdDev.annualized(port_returns, scale = 12)
+indiv_vols <- StdDev.annualized(indiv_returns, scale = 12)
+
+# Print the results to the console nicely
+cat("Annualized Portfolio Volatility:",
+    round(as.numeric(port_vol) * 100, 2), "%\n\n")
+
+cat("Annualized Individual Stock Volatilities:\n")
+# Convert to a readable data frame format for printing
+print(data.frame(Stock = colnames(prices),
+                 Volatility_Percent = round(as.numeric(indiv_vols) * 100, 2)))
 ```
 
 5. Discussion on Portfolio Performance
 
 Did diversification reduce volatility?
-Yes, looking at the graph, diversification definitely helped smooth out the ride.
-While the aggregate portfolio (the thick blue line) still experiences macroeconomic market dips—like the noticeable drop around the end of 2022—it is noticeably less erratic than some of the individual holdings. For example, ExxonMobil (XOM) had some very sharp spikes and drops throughout the timeline.
-However, because its movements were combined with the relatively flat, stable trajectory of Johnson & Johnson (JNJ) and the different timing of JPMorgan's (JPM) movements, the overall portfolio's path was smoothed out. 
+Yes. While the graph visually demonstrates a smoother growth curve for the aggregate portfolio compared to the erratic movements of individual assets, the mathematical calculations confirm it. The annualized volatility (standard deviation) of the portfolio was calculated at 14%. This is significantly lower than our riskiest individual assets (such as XOM at 27.68%), and it is lower than the simple average of all the individual stock volatilities. This reduction is a direct result of imperfect correlation between the different sectors (e.g., Tech vs. Energy vs. Healthcare). When one asset experiences a severe drawdown, another asset's stability or growth offsets it, successfully reducing the portfolio's non-systematic risk.
 
 Did the portfolio perform better than most individual stocks?
-Visually, the portfolio line is at the top of the chart, but that's because it represents the aggregate sum of my initial $1,000 investment, whereas the individual lines just show the growth of the $200 allocated to each specific stock.
-If we look at the actual growth rate, the portfolio performed right in the middle, which makes sense for an equal-weighted strategy. The portfolio's overall return was dragged down by underperformers like JNJ and AAPL, but it was boosted by big winners like XOM and JPM. Ultimately, the portfolio didn't beat our best performing individual stocks, but it successfully protected us from the poor returns of our worst performing stocks.
+Based on the "Value of a $1 Investment" plot, the portfolio performed squarely in the middle of the pack, which aligns with the mathematical expectation of an equal-weighted, buy-and-hold strategy. Because the portfolio represents an average of all holding returns, it naturally did not outperform the massive, compounding bull runs of our top-performing individual stocks (like XOM). However, it heavily outperformed our worst-performing laggards (like JNJ). Ultimately, the portfolio successfully did its job: it delivered a stable, blended return while protecting the investor's initial capital from the severe drawdowns and opportunity costs associated with picking a single losing asset.
 
 ## Part 2: Portfolio Optimization
 1. Efficient Frontier
@@ -193,6 +248,8 @@ frontier_df <- data.frame(Return = port_rets, SD = port_sds, W1 = w1, W2 = w2)
 ```{r}
 rf <- 0.03 # Assume a risk-free rate of 3%
 
+# Find the exact coordinates for the end of the Efficient Frontier
+end_frontier <- frontier_df[which.max(frontier_df$SD), ]
 # Identify the Global Minimum-Variance portfolio
 min_var_idx <- which.min(frontier_df$SD)
 min_var_port <- frontier_df[min_var_idx, ]
@@ -202,6 +259,10 @@ min_var_port <- frontier_df[min_var_idx, ]
 sharpe_ratios <- (frontier_df$Return - rf) / frontier_df$SD
 opt_risky_idx <- which.max(sharpe_ratios)
 opt_risky_port <- frontier_df[opt_risky_idx, ]
+
+# Calculate the exact coordinates for the end of the CAL
+max_sd <- max(frontier_df$SD)
+cal_y <- rf + max(sharpe_ratios) * max_sd
 
 # Plot the efficient frontier and mark both portfolios
 ggplot(frontier_df, aes(x = SD, y = Return)) +
@@ -220,16 +281,29 @@ ggplot(frontier_df, aes(x = SD, y = Return)) +
               intercept = rf,
               slope = max(sharpe_ratios),
               linetype = "dashed", color = "darkgreen") +
+  # Increased the right margin expansion to 40% (0.4)
+  scale_x_continuous(expand = expansion(mult = c(0.1, 0.4))) +
+  # This prevents ggplot from cutting off any text that overlaps the edges!
+  coord_cartesian(clip = "off") +
   labs(title = "Two-Asset Efficient Frontier (WMT & NVDA)",
-       x = "Risk (Annualized Standard Deviation)", 
+       x = "Risk (Annualized Standard Deviation)",
        y = "Expected Annual Return") +
   annotate("text",
            x = min_var_port$SD,
            y = min_var_port$Return,
-           label = "Min-Variance", vjust = -1.5, color="red") +
+           label = "Min-Variance", vjust = -1.5, hjust=0, color="red") +
   annotate("text", x = opt_risky_port$SD,
            y = opt_risky_port$Return,
            label = "Optimal Risky", vjust = -1.5,
            color = "green") +
+  # --- NEW: Annotation for the Efficient Frontier line ---
+  annotate("text", x = end_frontier$SD, y = end_frontier$Return,
+           label = "Efficient Frontier",
+           hjust = -0.1, color = "blue", fontface = "bold") +
+
+  # --- NEW: Annotation for the CAL ---
+  annotate("text", x = max_sd, y = cal_y,
+           label = "CAL",
+           hjust = -0.2, color = "darkgreen", fontface = "bold") +
   theme_minimal()
 ```
