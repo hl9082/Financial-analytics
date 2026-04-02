@@ -1,0 +1,27 @@
+---
+title: "FINC-580 Assignment #2 — Dual Moving Average Crossover Strategy"
+author: "Huy Le (hl9082)"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+# Load required packages
+library(quantmod)
+library(PerformanceAnalytics)
+library(ggplot2)
+library(tidyr)
+```
+
+## 1. Technical Implementation & Visualization
+Data Collection & Moving Averages
+Stock Selected: "TSLA"
+
+Data Period: January 1, 2019, to December 31, 2024.
+
+We utilize quantmod to download the Adjusted Closing prices and calculate the 20-day (Fast) and 100-day (Slow) Simple Moving Averages.
