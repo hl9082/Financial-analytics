@@ -25,3 +25,198 @@ Stock Selected: "TSLA"
 Data Period: January 1, 2019, to December 31, 2024.
 
 We utilize quantmod to download the Adjusted Closing prices and calculate the 20-day (Fast) and 100-day (Slow) Simple Moving Averages.
+
+```{r}
+ticker <- "AAPL" # Replace with your stock
+getSymbols(ticker, from = "2019-01-01", to = "2024-12-31", periodicity = "daily")
+
+# Extract Adjusted Close
+price <- Ad(get(ticker))
+colnames(price) <- "Price"
+
+# Calculate SMAs using TTR package (loaded with quantmod)
+sma20 <- SMA(price, n = 20)
+sma100 <- SMA(price, n = 100)
+
+# Combine into a single xts object
+data <- merge(price, sma20, sma100)
+colnames(data) <- c("Price", "SMA20", "SMA100")
+data <- na.omit(data) # Remove the first 100 days where SMA100 cannot be calculated
+```
+
+# Price and SMA Plot:
+```{r}
+# Convert to dataframe for ggplot
+plot_data <- data.frame(Date = index(data), coredata(data))
+plot_data_long <- pivot_longer(plot_data, cols = -Date, names_to = "Series", values_to = "Value")
+
+ggplot(plot_data_long, aes(x = Date, y = Value, color = Series)) +
+  geom_line(linewidth = 0.8) +
+  scale_color_manual(values = c("Price" = "black", "SMA20" = "blue", "SMA100" = "red")) +
+  labs(title = paste(ticker, "- Price vs. 20-Day and 100-Day SMA"),
+       y = "Price ($)", x = "Date") +
+  theme_minimal()
+```
+
+## 2. Strategy Signal Generation and Portfolio Return:
+Generating the Trading Signal
+- Rule: If SMA20 > SMA100, Invested = 1. Else, Invested = 0.
+- Lag: We lag the signal by exactly 1 period lag() to prevent look-ahead bias (we trade the day after the signal is generated).
+
+```{r}
+# Create the signal: 1 if SMA20 > SMA100, 0 otherwise
+data$Signal <- ifelse(data$SMA20 > data$SMA100, 1, 0)
+
+# Lag the signal by 1 day!
+data$Position <- lag(data$Signal, k = 1)
+
+# Calculate daily returns of the stock
+data$Stock_Return <- ROC(data$Price, type = "discrete")
+
+# Calculate Strategy Returns (Stock Return * Position)
+# If position is 0 (Cash), strategy return for that day is 0.
+data$Strategy_Return <- data$Stock_Return * data$Position
+data <- na.omit(data)
+```
+Cumulative Portfolio Value ($1 Investment)
+```{r}
+# Calculate cumulative growth of $1 for both Strategy and Buy & Hold
+cum_strategy <- cumprod(1 + data$Strategy_Return)
+cum_bnh <- cumprod(1 + data$Stock_Return)
+
+# Plotting the comparison
+plot_cum <- data.frame(Date = index(data), Strategy = coredata(cum_strategy), Buy_And_Hold = coredata(cum_bnh))
+plot_cum_long <- pivot_longer(plot_cum, cols = -Date, names_to = "Portfolio", values_to = "Value")
+
+ggplot(plot_cum_long, aes(x = Date, y = Value, color = Portfolio)) +
+  geom_line(linewidth = 1) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  labs(title = "Cumulative Returns: Dual SMA Strategy vs. Buy & Hold",
+       y = "Value of $1 Investment", x = "Date") +
+  theme_minimal()
+```
+
+## 3. Performance Evaluation
+We evaluate the risk-adjusted performance using the Sharpe Ratio (Risk-Free Rate = 0.02) and Maximum Drawdown.
+```{r}
+rf_daily <- 0.02 / 252 # Convert annual RF rate to daily
+
+# Annualized Sharpe Ratio
+sharpe_strat <- SharpeRatio.annualized(data$Strategy_Return, Rf = rf_daily)
+sharpe_bnh <- SharpeRatio.annualized(data$Stock_Return, Rf = rf_daily)
+
+# Maximum Drawdown
+maxdd_strat <- maxDrawdown(data$Strategy_Return)
+maxdd_bnh <- maxDrawdown(data$Stock_Return)
+
+# Print cleanly
+cat("Strategy Annualized Sharpe Ratio:", round(sharpe_strat, 4), "\n")
+cat("Buy & Hold Annualized Sharpe Ratio:", round(sharpe_bnh, 4), "\n\n")
+
+cat("Strategy Max Drawdown:", round(maxdd_strat * 100, 2), "%\n")
+cat("Buy & Hold Max Drawdown:", round(maxdd_bnh * 100, 2), "%\n")
+```
+
+## 4. Analysis
+Q: Compare the final cumulative value and comment on whether the strategy was successful based on the Sharpe Ratio.
+
+Based on the cumulative returns chart, the final value of a $1 investment in the SMA20/SMA100 strategy was $X.XX, compared to $Y.YY for the standard buy-and-hold approach. (Did it beat the market?)
+
+Looking at risk-adjusted performance, the Strategy generated a Sharpe Ratio of 0.7457, compared to the Buy & Hold Sharpe of 1.1172. Furthermore, the strategy limited our Maximum Drawdown to 35.38%, while holding the stock exposed us to a worse drawdown of 31.43%. Ultimately, the strategy was [successful / unsuccessful] because... (explain if the reduced risk/drawdown was worth any potential underperformance in total return!)
+
+---
+
+## 5. Extra Credit: K-Nearest Neighbors (KNN) Trading Strategy
+
+### Theoretical Framework & Feature Engineering
+As discussed in the Ang textbook (Chapter 12), while simple moving averages are rigid heuristic rules, machine learning algorithms like K-Nearest Neighbors (KNN) allow the data to dictate the optimal pattern recognition. 
+
+KNN is a non-parametric classification algorithm. We will use it to predict the **direction of tomorrow's return** (Up or Down) based on recent historical price momentum (our features). 
+
+**CRITICAL - Avoiding Look-Ahead Bias:** To prevent the model from "peeking into the future," our predictive features for Day $t$ MUST be strictly lagged (e.g., returns from Day $t-1$, $t-2$, and $t-5$). We cannot use today's closing price to predict today's return!
+
+```{r knn-setup}
+# Load the 'caret' package for machine learning and cross-validation
+# (If you don't have it, run install.packages("caret") in your console first)
+library(caret)
+
+# 1. Create a fresh dataframe from our original 'data' object
+# We isolate just the Date and the Daily Return of the stock
+knn_df <- data.frame(Date = index(data), 
+                     Return = coredata(data$Stock_Return))
+
+# 2. FEATURE ENGINEERING (Predictors)
+# We create lagged variables to represent recent historical momentum.
+# Lag1 = Yesterday's return, Lag2 = 2 days ago, Lag5 = 1 week ago.
+knn_df$Lag1 <- lag(knn_df$Return, 1)
+knn_df$Lag2 <- lag(knn_df$Return, 2)
+knn_df$Lag5 <- lag(knn_df$Return, 5)
+
+# 3. TARGET VARIABLE (What we are trying to predict)
+# We categorize today's return as a factor: "Up" if positive, "Down" if negative.
+# Because our features are LAGGED (from yesterday), predicting "today's" target 
+# correctly simulates generating a signal yesterday afternoon to trade today.
+knn_df$Target <- as.factor(ifelse(knn_df$Return > 0, "Up", "Down"))
+
+# Remove all NA rows generated by the lagging process
+knn_df <- na.omit(knn_df)
+```
+
+Model Training with K-Fold Cross-ValidationTo prevent overfitting (creating a model that perfectly memorizes the past but fails in the future), we will use k-fold cross-validation. The caret package will split our data into 5 separate chunks (folds). It will train the model on 4 folds, test it on the 1 remaining fold, and repeat this process to find the mathematically optimal number of "neighbors" (the $k$ in KNN) to base its predictions on.
+```{r}
+# 1. Set a random seed so the cross-validation split is strictly reproducible
+set.seed(580)
+# 2. Define the training control parameters: 5-fold cross-validation
+train_control <- trainControl(method = "cv", number = 5)
+# 3. Train the K-Nearest Neighbors model
+# Formula: Target ~ Lag1 + Lag2 + Lag5 (Predict Target using our 3 lagged features)
+knn_model <- train(Target ~ Lag1 + Lag2 + Lag5, 
+                   data = knn_df, 
+                   method = "knn",
+                   trControl = train_control,
+                   preProcess = c("center", "scale"), # Standardizes data (crucial for distance-based KNN!)
+                   tuneLength = 5) # Tells caret to test 5 different values of 'k'
+# Print the model summary to see which 'k' (number of neighbors) performed best
+print(knn_model)
+```
+
+Performance Evaluation & Visualization
+We will now evaluate if the machine learning model managed to outperform both the standard Buy-and-Hold approach and the rigid Dual SMA crossover strategy we built in Part 2.
+```{r}
+# 1. Plotting the KNN Cumulative Return vs Buy & Hold
+plot_knn <- pivot_longer(knn_df[, c("Date", "Cum_Strategy", "Cum_BnH")], 
+                         cols = -Date, names_to = "Portfolio", values_to = "Value")
+
+ggplot(plot_knn, aes(x = Date, y = Value, color = Portfolio)) +
+  geom_line(linewidth = 1) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  scale_color_manual(values = c("Cum_BnH" = "black", "Cum_Strategy" = "purple"),
+                     labels = c("Buy & Hold", "KNN ML Strategy")) +
+  labs(title = "Machine Learning (KNN) Strategy vs. Buy & Hold",
+       y = "Value of $1 Investment", x = "Date") +
+  theme_minimal()
+
+# 2. Risk Metrics Calculation
+# Convert back to an xts object for PerformanceAnalytics functions
+knn_returns_xts <- xts(knn_df[, c("Return", "Strategy_Return")], order.by = knn_df$Date)
+
+# Calculate Sharpe Ratios (using the same daily Risk-Free rate from earlier)
+knn_sharpe <- SharpeRatio.annualized(knn_returns_xts$Strategy_Return, Rf = rf_daily)
+bnh_sharpe <- SharpeRatio.annualized(knn_returns_xts$Return, Rf = rf_daily)
+
+# Calculate Maximum Drawdowns
+knn_maxdd <- maxDrawdown(knn_returns_xts$Strategy_Return)
+bnh_maxdd <- maxDrawdown(knn_returns_xts$Return)
+
+# Print beautifully formatted results
+cat("--- PERFORMANCE EVALUATION: KNN STRATEGY vs BUY & HOLD ---\n")
+cat(sprintf("KNN Strategy Sharpe Ratio: %.4f\n", knn_sharpe))
+cat(sprintf("Buy & Hold Sharpe Ratio:   %.4f\n\n", bnh_sharpe))
+
+cat(sprintf("KNN Strategy Max Drawdown: %.2f%%\n", knn_maxdd * 100))
+cat(sprintf("Buy & Hold Max Drawdown:   %.2f%%\n", bnh_maxdd * 100))
+```
+
+KNN Strategy Analysis
+[Student Answer Placeholder] >
+Write a brief paragraph here based on the numbers that print out! Did the machine learning model beat the moving average strategy from Part 2? Why do you think it did or didn't? Focus heavily on how the KNN model attempts to classify volatility based on lagged historical patterns, whereas the SMA is a lagging trend-follower. Note if the Maximum Drawdown was significantly reduced by the model sitting in cash during periods classified as "Down" trends.
