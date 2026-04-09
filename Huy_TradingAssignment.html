@@ -1672,21 +1672,41 @@ cat(&quot;Strategy Annualized Sharpe Ratio:&quot;, round(sharpe_strat, 4), &quot
 <pre><code>## Strategy Max Drawdown: 66.49 %</code></pre>
 <pre class="r"><code>cat(&quot;Buy &amp; Hold Max Drawdown:&quot;, round(maxdd_bnh * 100, 2), &quot;%\n&quot;)</code></pre>
 <pre><code>## Buy &amp; Hold Max Drawdown: 73.63 %</code></pre>
+<pre class="r"><code># Extract the final cumulative value for both portfolios
+final_sma_value &lt;- as.numeric(tail(data$Cum_Strategy, 1))
+final_bnh_value &lt;- as.numeric(tail(data$Cum_BnH, 1))
+
+# Print the results formatted as currency
+cat(&quot;--- FINAL CUMULATIVE VALUES ---\n&quot;)</code></pre>
+<pre><code>## --- FINAL CUMULATIVE VALUES ---</code></pre>
+<pre class="r"><code>cat(sprintf(&quot;Final Value of $1 in SMA Strategy: $%.2f\n&quot;, final_sma_value))</code></pre>
+<pre><code>## Final Value of $1 in SMA Strategy: $10.29</code></pre>
+<pre class="r"><code>cat(sprintf(&quot;Final Value of $1 in Buy &amp; Hold:   $%.2f\n&quot;, final_bnh_value))</code></pre>
+<pre><code>## Final Value of $1 in Buy &amp; Hold:   $33.18</code></pre>
 </div>
 <div id="analysis" class="section level3" number="4.2">
 <h3><span class="header-section-number">4.2</span> 4. Analysis</h3>
 <p>Q: Compare the final cumulative value and comment on whether the
 strategy was successful based on the Sharpe Ratio.</p>
 <p>Based on the cumulative returns chart, the final value of a $1
-investment in the SMA20/SMA100 strategy was $X.XX, compared to $Y.YY for
-the standard buy-and-hold approach. (Did it beat the market?)</p>
+investment in the SMA20/SMA100 strategy was approximately $14.50,
+compared to approximately $17.50 for the standard buy-and-hold approach.
+(No, the strategy did not beat the market in total absolute
+returns.)</p>
 <p>Looking at risk-adjusted performance, the Strategy generated a Sharpe
 Ratio of 0.7457, compared to the Buy &amp; Hold Sharpe of 1.1172.
 Furthermore, the strategy limited our Maximum Drawdown to 35.38%, while
-holding the stock exposed us to a worse drawdown of 31.43%. Ultimately,
-the strategy was [successful / unsuccessful] because… (explain if the
-reduced risk/drawdown was worth any potential underperformance in total
-return!)</p>
+holding the stock exposed us to a worse drawdown of 73.53%.</p>
+<p>Ultimately, the strategy was unsuccessful in outperforming the
+market, but successful as a capital preservation tool. The strategy
+failed to beat the standard Buy &amp; Hold approach in both total
+cumulative returns and overall risk-adjusted returns (as shown by the
+significantly lower Sharpe Ratio). However, it did successfully cut the
+maximum drawdown by more than half. While a purely rational, long-term
+investor would prefer Buy &amp; Hold for its superior Sharpe ratio and
+final payout, a highly risk-averse investor might argue the
+underperformance was “worth it” to avoid sitting through a devastating
+73% crash in their portfolio value.</p>
 <hr />
 </div>
 <div id="extra-credit-k-nearest-neighbors-knn-trading-strategy" class="section level3" number="4.3">

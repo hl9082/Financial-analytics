@@ -161,14 +161,25 @@ cat("Buy & Hold Annualized Sharpe Ratio:", round(sharpe_bnh, 4), "\n\n")
 
 cat("Strategy Max Drawdown:", round(maxdd_strat * 100, 2), "%\n")
 cat("Buy & Hold Max Drawdown:", round(maxdd_bnh * 100, 2), "%\n")
+
+# Extract the final cumulative value for both portfolios
+final_sma_value <- as.numeric(tail(data$Cum_Strategy, 1))
+final_bnh_value <- as.numeric(tail(data$Cum_BnH, 1))
+
+# Print the results formatted as currency
+cat("--- FINAL CUMULATIVE VALUES ---\n")
+cat(sprintf("Final Value of $1 in SMA Strategy: $%.2f\n", final_sma_value))
+cat(sprintf("Final Value of $1 in Buy & Hold:   $%.2f\n", final_bnh_value))
 ```
 
 ### 4. Analysis
 Q: Compare the final cumulative value and comment on whether the strategy was successful based on the Sharpe Ratio.
 
-Based on the cumulative returns chart, the final value of a $1 investment in the SMA20/SMA100 strategy was $X.XX, compared to $Y.YY for the standard buy-and-hold approach. (Did it beat the market?)
+Based on the cumulative returns chart, the final value of a $1 investment in the SMA20/SMA100 strategy was approximately $10.29, compared to approximately $33.18 for the standard buy-and-hold approach. Therefore, the Dual SMA strategy did not beat the market in total absolute returns.
 
-Looking at risk-adjusted performance, the Strategy generated a Sharpe Ratio of 0.7457, compared to the Buy & Hold Sharpe of 1.1172. Furthermore, the strategy limited our Maximum Drawdown to 35.38%, while holding the stock exposed us to a worse drawdown of 31.43%. Ultimately, the strategy was [successful / unsuccessful] because... (explain if the reduced risk/drawdown was worth any potential underperformance in total return!)
+Looking at risk-adjusted performance, the Strategy generated a Sharpe Ratio of 0.8902, compared to the Buy & Hold Sharpe of 1.276. Furthermore, the strategy limited our Maximum Drawdown to 66.49%, while holding the stock exposed us to a worse drawdown of 73.63%.
+
+Ultimately, the strategy was unsuccessful in outperforming the market, but successful as a capital preservation tool. The strategy failed to beat the standard Buy & Hold approach in both total cumulative returns and overall risk-adjusted returns (as shown by the significantly lower Sharpe Ratio). However, it did successfully cut the maximum drawdown. While a purely rational, long-term investor would prefer Buy & Hold for its superior Sharpe ratio and final payout, a highly risk-averse investor might argue the underperformance was "worth it" to avoid sitting through a devastating 73.63% crash in their portfolio value.
 
 ---
 
