@@ -1689,24 +1689,24 @@ cat(&quot;--- FINAL CUMULATIVE VALUES ---\n&quot;)</code></pre>
 <p>Q: Compare the final cumulative value and comment on whether the
 strategy was successful based on the Sharpe Ratio.</p>
 <p>Based on the cumulative returns chart, the final value of a $1
-investment in the SMA20/SMA100 strategy was approximately $14.50,
-compared to approximately $17.50 for the standard buy-and-hold approach.
-(No, the strategy did not beat the market in total absolute
-returns.)</p>
+investment in the SMA20/SMA100 strategy was approximately $10.29,
+compared to approximately $33.18 for the standard buy-and-hold approach.
+Therefore, the Dual SMA strategy did not beat the market in total
+absolute returns.</p>
 <p>Looking at risk-adjusted performance, the Strategy generated a Sharpe
-Ratio of 0.7457, compared to the Buy &amp; Hold Sharpe of 1.1172.
-Furthermore, the strategy limited our Maximum Drawdown to 35.38%, while
-holding the stock exposed us to a worse drawdown of 73.53%.</p>
+Ratio of 0.8902, compared to the Buy &amp; Hold Sharpe of 1.276.
+Furthermore, the strategy limited our Maximum Drawdown to 66.49%, while
+holding the stock exposed us to a worse drawdown of 73.63%.</p>
 <p>Ultimately, the strategy was unsuccessful in outperforming the
 market, but successful as a capital preservation tool. The strategy
 failed to beat the standard Buy &amp; Hold approach in both total
 cumulative returns and overall risk-adjusted returns (as shown by the
 significantly lower Sharpe Ratio). However, it did successfully cut the
-maximum drawdown by more than half. While a purely rational, long-term
-investor would prefer Buy &amp; Hold for its superior Sharpe ratio and
-final payout, a highly risk-averse investor might argue the
-underperformance was “worth it” to avoid sitting through a devastating
-73% crash in their portfolio value.</p>
+maximum drawdown. While a purely rational, long-term investor would
+prefer Buy &amp; Hold for its superior Sharpe ratio and final payout, a
+highly risk-averse investor might argue the underperformance was “worth
+it” to avoid sitting through a devastating 73.63% crash in their
+portfolio value.</p>
 <hr />
 </div>
 <div id="extra-credit-k-nearest-neighbors-knn-trading-strategy" class="section level3" number="4.3">
@@ -1908,14 +1908,24 @@ cat(&quot;--- KNN STRATEGY vs BUY &amp; HOLD ---\n&quot;)</code></pre>
 <div id="knn-strategy-analysis" class="section level2" number="10">
 <h2><span class="header-section-number">10</span> KNN Strategy
 Analysis</h2>
-<p>[Student Answer Placeholder] &gt; Write a brief paragraph here based
-on the numbers that print out! Did the machine learning model beat the
-moving average strategy from Part 2? Why do you think it did or didn’t?
-Focus heavily on how the KNN model attempts to classify volatility based
-on lagged historical patterns, whereas the SMA is a lagging
-trend-follower. Note if the Maximum Drawdown was significantly reduced
-by the model sitting in cash during periods classified as “Down”
-trends.</p>
+<p>Based on the results, the Machine Learning (KNN) strategy
+significantly outperformed the standard Buy &amp; Hold approach,
+generating a vastly superior Sharpe Ratio of 4.4398 compared to 0.9282.
+Furthermore, the KNN model successfully reduced the Maximum Drawdown by
+nearly half, keeping it at 37.58% while the Buy &amp; Hold strategy
+suffered a devastating 73.63% crash. This strategy also seems to have
+heavily outperformed the SMA strategy from Part 2. This outperformance
+likely stems from the fundamental difference in how the models operate.
+The SMA is a simple trend-following strategy; it is inherently
+“lagging,” meaning it only reacts after a trend has already started,
+which often leads to late entries and exits. In contrast, the KNN model
+is a classification algorithm that attempts to predict future direction
+based on historical patterns of volatility and lagged returns. By
+actively classifying periods as “Up” or “Down” based on similar
+historical environments, the KNN model was able to preemptively shift to
+cash during high-risk periods, successfully avoiding the deepest
+drawdowns and preserving capital much more effectively than a lagging
+indicator.</p>
 </div>
 
 
