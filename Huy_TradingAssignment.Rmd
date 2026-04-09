@@ -255,10 +255,13 @@ head.tail(knn_df[, c("Target", "Position", "Cum_Strategy", "Cum_BnH")])
 # --- PLOT ---
 plot_knn <- pivot_longer(knn_df[, c("Date", "Cum_Strategy", "Cum_BnH")], 
                          cols = -Date, names_to = "Portfolio", values_to = "Value")
-
+# Calculate the maximum y-value for the KNN plot
+max_y_knn <- ceiling(max(plot_knn$Value, na.rm = TRUE))
 plot(ggplot(plot_knn, aes(x = Date, y = Value, color = Portfolio)) +
   geom_line(linewidth = 1) +
   geom_hline(yintercept = 1, linetype = "dashed") +
+  # CRITICAL FIX: Only print the 1 and the max value, removing the 0 to avoid overlapping!
+  scale_y_continuous(limits = c(0, max_y_knn), breaks = c(1, max_y_knn)) +
   scale_color_manual(values = c("Cum_BnH" = "black", "Cum_Strategy" = "purple"),
                      labels = c("Buy & Hold", "KNN ML Strategy")) +
   labs(title = "Machine Learning (KNN) Strategy vs. Buy & Hold",
