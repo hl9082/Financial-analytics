@@ -329,6 +329,29 @@ plot(ggplot(plot_knn_sma, aes(x = Date, y = Value, color = Portfolio)) +
   labs(title = "Machine Learning (KNN) Strategy vs. Dual SMA Strategy",
        y = "Value of $1 Investment", x = "Date") +
   theme_minimal())
+
+# Make sure the PerformanceAnalytics library is loaded
+library(PerformanceAnalytics)
+
+# 1. Convert our combined cumulative columns back into time-series returns
+# We use Return.calculate to find the daily % change between cumulative values
+knn_returns <- Return.calculate(xts(combined_df$Cum_Strategy, order.by = combined_df$Date))
+sma_returns <- Return.calculate(xts(combined_df$Cum_SMA, order.by = combined_df$Date))
+
+# 2. Calculate Annualized Sharpe Ratios (Assuming 252 trading days)
+knn_sharpe <- SharpeRatio.annualized(knn_returns, Rf = 0, scale = 252)
+sma_sharpe <- SharpeRatio.annualized(sma_returns, Rf = 0, scale = 252)
+
+# 3. Calculate Maximum Drawdowns
+knn_max_dd <- maxDrawdown(knn_returns)
+sma_max_dd <- maxDrawdown(sma_returns)
+
+# 4. Print the final comparison!
+cat("--- KNN vs. DUAL SMA PERFORMANCE ---\n")
+cat(sprintf("KNN Strategy Sharpe Ratio: %.4f\n", as.numeric(knn_sharpe)))
+cat(sprintf("Dual SMA Sharpe Ratio:     %.4f\n", as.numeric(sma_sharpe)))
+cat(sprintf("KNN Strategy Max Drawdown: %.2f%%\n", as.numeric(knn_max_dd) * 100))
+cat(sprintf("Dual SMA Max Drawdown:     %.2f%%\n", as.numeric(sma_max_dd) * 100))
 ```
 
 ## KNN Strategy Analysis
