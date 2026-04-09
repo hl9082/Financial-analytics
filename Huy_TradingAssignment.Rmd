@@ -5,13 +5,22 @@ date: "`r Sys.Date()`"
 output: 
   html_document:
     toc: true
-    theme: readable
+    toc_depth: 3
+    toc_float: true
+    number_sections: true
 ---
 
+This script implements a Dual Moving Average Crossover strategy using Tesla (TSLA) stock.
+
+The code calculates trading signals, portfolio performance, Sharpe ratio, and maximum drawdown for the 2019-2024 period.
+
+An extra credit section replicates the analysis using a machine learning K-Nearest Neighbors (KNN) model.
+
+### 0. Setting up libraries and preparing helper function
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 # 1. Define ALL the packages you need (now including 'caret' for the Extra Credit)
-required_packages <- c("quantmod", "PerformanceAnalytics", "ggplot2", "tidyr")
+required_packages <- c("quantmod", "PerformanceAnalytics", "ggplot2", "tidyr", "caret", "dplyr")
 install.packages("caret", repos = "http://cran.rstudio.com/", dependencies = TRUE)
 
 # 2. Check which ones are NOT already installed on your computer
@@ -28,24 +37,34 @@ library(quantmod)
 library(PerformanceAnalytics)
 library(ggplot2)
 library(tidyr)
+library(caret)
+library(dplyr)
+
+# ---- Helper Function to Display First and Last Rows ----
+head.tail <- function(x) rbind(head(x), tail(x))
 ```
 
-## 1. Technical Implementation & Visualization
+
+### 1. Technical Implementation & Visualization
 Data Collection & Moving Averages
-Stock Selected: "TSLA"
+Stock Selected: Tesla
 
 Data Period: January 1, 2019, to December 31, 2024.
 
 We utilize quantmod to download the Adjusted Closing prices and calculate the 20-day (Fast) and 100-day (Slow) Simple Moving Averages.
 
 ```{r}
-ticker <- "AAPL" # Replace with your stock
+ticker <- "TSLA" 
 getSymbols(ticker, from = "2019-01-01", to = "2024-12-31", periodicity = "daily")
 
 # Extract Adjusted Close
 price <- Ad(get(ticker))
 colnames(price) <- "Price"
 
+head.tail(price)
+```
+## Calculate 20-Day and 100-Day Moving Averages
+```{r}
 # Calculate SMAs using TTR package (loaded with quantmod)
 sma20 <- SMA(price, n = 20)
 sma100 <- SMA(price, n = 100)
@@ -54,9 +73,10 @@ sma100 <- SMA(price, n = 100)
 data <- merge(price, sma20, sma100)
 colnames(data) <- c("Price", "SMA20", "SMA100")
 data <- na.omit(data) # Remove the first 100 days where SMA100 cannot be calculated
+head.tail(data)
 ```
 
-# Price and SMA Plot:
+## Plot Price and Moving Averages:
 ```{r}
 # Convert to dataframe for ggplot
 plot_data <- data.frame(Date = index(data), coredata(data))
@@ -70,7 +90,7 @@ ggplot(plot_data_long, aes(x = Date, y = Value, color = Series)) +
   theme_minimal()
 ```
 
-## 2. Strategy Signal Generation and Portfolio Return:
+### 2. Trading Signal Generation and Portfolio Return:
 Generating the Trading Signal
 - Rule: If SMA20 > SMA100, Invested = 1. Else, Invested = 0.
 - Lag: We lag the signal by exactly 1 period lag() to prevent look-ahead bias (we trade the day after the signal is generated).
@@ -80,24 +100,32 @@ Generating the Trading Signal
 data$Signal <- ifelse(data$SMA20 > data$SMA100, 1, 0)
 
 # Lag the signal by 1 day!
-data$Position <- lag(data$Signal, k = 1)
+data$Position <- quantmod::Lag(data$Signal, k = 1)
+data <- na.omit(data)
 
+head.tail(data[, c("SMA20", "SMA100", "Signal", "Position")])
+```
+## Calculate Portfolio Returns
+```{r}
 # Calculate daily returns of the stock
 data$Stock_Return <- ROC(data$Price, type = "discrete")
 
 # Calculate Strategy Returns (Stock Return * Position)
-# If position is 0 (Cash), strategy return for that day is 0.
 data$Strategy_Return <- data$Stock_Return * data$Position
 data <- na.omit(data)
-```
-Cumulative Portfolio Value ($1 Investment)
-```{r}
-# Calculate cumulative growth of $1 for both Strategy and Buy & Hold
-cum_strategy <- cumprod(1 + data$Strategy_Return)
-cum_bnh <- cumprod(1 + data$Stock_Return)
 
+# Calculate cumulative growth of $1 for both Strategy and Buy & Hold
+data$Cum_Strategy <- cumprod(1 + data$Strategy_Return)
+data$Cum_BnH <- cumprod(1 + data$Stock_Return)
+
+head.tail(data[, c("Stock_Return", "Strategy_Return", "Cum_Strategy", "Cum_BnH")])
+```
+## Plot Cumulative Portfolio Value
+```{r}
 # Plotting the comparison
-plot_cum <- data.frame(Date = index(data), Strategy = coredata(cum_strategy), Buy_And_Hold = coredata(cum_bnh))
+plot_cum <- data.frame(Date = index(data), 
+                       Strategy = coredata(data$Cum_Strategy), 
+                       Buy_And_Hold = coredata(data$Cum_BnH))
 plot_cum_long <- pivot_longer(plot_cum, cols = -Date, names_to = "Portfolio", values_to = "Value")
 
 ggplot(plot_cum_long, aes(x = Date, y = Value, color = Portfolio)) +
@@ -108,7 +136,7 @@ ggplot(plot_cum_long, aes(x = Date, y = Value, color = Portfolio)) +
   theme_minimal()
 ```
 
-## 3. Performance Evaluation
+### 3. Performance Evaluation
 We evaluate the risk-adjusted performance using the Sharpe Ratio (Risk-Free Rate = 0.02) and Maximum Drawdown.
 ```{r}
 rf_daily <- 0.02 / 252 # Convert annual RF rate to daily
@@ -129,7 +157,7 @@ cat("Strategy Max Drawdown:", round(maxdd_strat * 100, 2), "%\n")
 cat("Buy & Hold Max Drawdown:", round(maxdd_bnh * 100, 2), "%\n")
 ```
 
-## 4. Analysis
+### 4. Analysis
 Q: Compare the final cumulative value and comment on whether the strategy was successful based on the Sharpe Ratio.
 
 Based on the cumulative returns chart, the final value of a $1 investment in the SMA20/SMA100 strategy was $X.XX, compared to $Y.YY for the standard buy-and-hold approach. (Did it beat the market?)
@@ -138,20 +166,17 @@ Looking at risk-adjusted performance, the Strategy generated a Sharpe Ratio of 0
 
 ---
 
-## 5. Extra Credit: K-Nearest Neighbors (KNN) Trading Strategy
+### 5. Extra Credit: K-Nearest Neighbors (KNN) Trading Strategy
 
-### Theoretical Framework & Feature Engineering
+## Theoretical Framework & Feature Engineering
 As discussed in the Ang textbook (Chapter 12), while simple moving averages are rigid heuristic rules, machine learning algorithms like K-Nearest Neighbors (KNN) allow the data to dictate the optimal pattern recognition. 
 
 KNN is a non-parametric classification algorithm. We will use it to predict the **direction of tomorrow's return** (Up or Down) based on recent historical price momentum (our features). 
 
-**CRITICAL - Avoiding Look-Ahead Bias:** To prevent the model from "peeking into the future," our predictive features for Day $t$ MUST be strictly lagged (e.g., returns from Day $t-1$, $t-2$, and $t-5$). We cannot use today's closing price to predict today's return!
+To prevent the model from "peeking into the future," our predictive features for Day $t$ MUST be strictly lagged (e.g., returns from Day $t-1$, $t-2$, and $t-5$). We cannot use today's closing price to predict today's return!
 
+## KNN Data Preparation & Feature Engineering
 ```{r knn-setup}
-# Load caret for machine learning
-library(caret)
-library(quantmod)
-
 # 1. Start fresh with the 'price' object from Part 1
 # Calculate daily returns natively as an xts time-series
 knn_rets <- ROC(price, type = "discrete")
@@ -178,9 +203,13 @@ knn_df$Target <- as.factor(ifelse(knn_df$Return > 0, "Up", "Down"))
 
 # 5. Remove all rows with NAs (due to the 5-day lag and initial ROC calculation)
 knn_df <- na.omit(knn_df)
+
+head.tail(knn_df)
 ```
 
-Model Training with K-Fold Cross-ValidationTo prevent overfitting (creating a model that perfectly memorizes the past but fails in the future), we will use k-fold cross-validation. The caret package will split our data into 5 separate chunks (folds). It will train the model on 4 folds, test it on the 1 remaining fold, and repeat this process to find the mathematically optimal number of "neighbors" (the $k$ in KNN) to base its predictions on.
+## Train the KNN Model
+- Model Training with K-Fold Cross-ValidationTo prevent overfitting (creating a model that perfectly memorizes the past but fails in the future), we will use k-fold cross-validation. 
+- The caret package will split our data into 5 separate chunks (folds). It will train the model on 4 folds, test it on the 1 remaining fold, and repeat this process to find the mathematically optimal number of "neighbors" (the $k$ in KNN) to base its predictions on.
 ```{r}
 # 1. Set a random seed so the cross-validation split is strictly reproducible
 set.seed(580)
@@ -198,38 +227,25 @@ knn_model <- train(Target ~ Lag1 + Lag2 + Lag5,
 print(knn_model)
 ```
 
-Performance Evaluation & Visualization
-We will now evaluate if the machine learning model managed to outperform both the standard Buy-and-Hold approach and the rigid Dual SMA crossover strategy we built in Part 2.
+## Backtest the KNN Strategy
 ```{r}
-# --- 1. TRAIN THE KNN MODEL ---
-# --- 1. TRAIN THE KNN MODEL ---
-set.seed(580)
-train_control <- trainControl(method = "cv", number = 5)
-
-knn_model <- train(Target ~ Lag1 + Lag2 + Lag5, 
-                   data = knn_df, 
-                   method = "knn",
-                   trControl = train_control,
-                   preProcess = c("center", "scale"), 
-                   tuneLength = 5)
-
-# --- 2. BACKTEST THE STRATEGY ---
 # Generate predictions
 knn_predictions <- predict(knn_model, newdata = knn_df)
 
 # Translate predictions into trading signals (1 = Invested, 0 = Cash)
 knn_df$Position <- ifelse(knn_predictions == "Up", 1, 0)
 
-# Calculate Daily Returns
+# Calculate Daily Returns & Cumulative Returns
 knn_df$Strategy_Return <- knn_df$Return * knn_df$Position
-
-# Create the Cumulative Return columns
 knn_df$Cum_Strategy <- cumprod(1 + knn_df$Strategy_Return)
 knn_df$Cum_BnH <- cumprod(1 + knn_df$Return)
 
+head.tail(knn_df[, c("Target", "Position", "Cum_Strategy", "Cum_BnH")])
+```
 
-# --- 3. PLOT THE RESULTS ---
-library(tidyr)
+## Evaluate KNN Performance
+- We will now evaluate if the machine learning model managed to outperform both the standard Buy-and-Hold approach and the rigid Dual SMA crossover strategy we built in Part 2.
+```{r}
 plot_knn <- pivot_longer(knn_df[, c("Date", "Cum_Strategy", "Cum_BnH")], 
                          cols = -Date, names_to = "Portfolio", values_to = "Value")
 
@@ -242,12 +258,11 @@ ggplot(plot_knn, aes(x = Date, y = Value, color = Portfolio)) +
        y = "Value of $1 Investment", x = "Date") +
   theme_minimal()
 
-
-# --- 4. CALCULATE PERFORMANCE METRICS ---
+# --- CALCULATE PERFORMANCE METRICS ---
 library(PerformanceAnalytics)
 rf_daily <- 0.02 / 252 # Define daily risk-free rate
 
-# CRITICAL FIX: Convert standard columns back into time-aware 'xts' objects
+# Convert standard columns back into time-aware 'xts' objects
 strat_returns_xts <- xts(knn_df$Strategy_Return, order.by = as.Date(knn_df$Date))
 bnh_returns_xts <- xts(knn_df$Return, order.by = as.Date(knn_df$Date))
 
@@ -266,8 +281,9 @@ cat(sprintf("Buy & Hold Sharpe Ratio:   %.4f\n\n", bnh_sharpe))
 
 cat(sprintf("KNN Strategy Max Drawdown: %.2f%%\n", knn_maxdd * 100))
 cat(sprintf("Buy & Hold Max Drawdown:   %.2f%%\n", bnh_maxdd * 100))
+
 ```
 
-KNN Strategy Analysis
+## KNN Strategy Analysis
 [Student Answer Placeholder] >
 Write a brief paragraph here based on the numbers that print out! Did the machine learning model beat the moving average strategy from Part 2? Why do you think it did or didn't? Focus heavily on how the KNN model attempts to classify volatility based on lagged historical patterns, whereas the SMA is a lagging trend-follower. Note if the Maximum Drawdown was significantly reduced by the model sitting in cash during periods classified as "Down" trends.
