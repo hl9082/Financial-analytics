@@ -332,15 +332,16 @@ plot(ggplot(plot_knn_sma, aes(x = Date, y = Value, color = Portfolio)) +
 
 # Make sure the PerformanceAnalytics library is loaded
 library(PerformanceAnalytics)
-
+# Calculate Risk-Free Rate dynamically
+rf_daily <- 0.02 / 252
 # 1. Convert our combined cumulative columns back into time-series returns
 # We use Return.calculate to find the daily % change between cumulative values
 knn_returns <- Return.calculate(xts(combined_df$Cum_Strategy, order.by = combined_df$Date))
 sma_returns <- Return.calculate(xts(combined_df$Cum_SMA, order.by = combined_df$Date))
 
 # 2. Calculate Annualized Sharpe Ratios (Assuming 252 trading days)
-knn_sharpe <- SharpeRatio.annualized(knn_returns, Rf = 0, scale = 252)
-sma_sharpe <- SharpeRatio.annualized(sma_returns, Rf = 0, scale = 252)
+knn_sharpe <- SharpeRatio.annualized(knn_returns, Rf = rf_daily)
+sma_sharpe <- SharpeRatio.annualized(sma_returns, Rf = rf_daily)
 
 # 3. Calculate Maximum Drawdowns
 knn_max_dd <- maxDrawdown(knn_returns)
@@ -355,4 +356,5 @@ cat(sprintf("Dual SMA Max Drawdown:     %.2f%%\n", as.numeric(sma_max_dd) * 100)
 ```
 
 ## KNN Strategy Analysis
-Based on the results, the Machine Learning (KNN) strategy significantly outperformed the standard Buy & Hold approach, generating a vastly superior Sharpe Ratio of 4.4398 compared to 0.9282. Furthermore, the KNN model successfully reduced the Maximum Drawdown by nearly half, keeping it at 37.58% while the Buy & Hold strategy suffered a devastating 73.63% crash. This strategy also seems to have heavily outperformed the SMA strategy from Part 2. This outperformance likely stems from the fundamental difference in how the models operate. The SMA is a simple trend-following strategy; it is inherently "lagging," meaning it only reacts after a trend has already started, which often leads to late entries and exits. In contrast, the KNN model is a classification algorithm that attempts to predict future direction based on historical patterns of volatility and lagged returns. By actively classifying periods as "Up" or "Down" based on similar historical environments, the KNN model was able to preemptively shift to cash during high-risk periods, successfully avoiding the deepest drawdowns and preserving capital much more effectively than a lagging indicator.
+- Based on the results, the Machine Learning (KNN) strategy significantly outperformed the standard Buy & Hold approach, generating a vastly superior Sharpe Ratio of 4.4398 compared to 0.9282. Furthermore, the KNN model successfully reduced the Maximum Drawdown by nearly half, keeping it at 37.58% while the Buy & Hold strategy suffered a devastating 73.63% crash. This massive outperformance stems from the fundamental differences in how these approaches manage risk. A standard Buy & Hold approach offers zero downside protection, forcing the investor to absorb every market crash, while the KNN strategy offers more reliable downside protection.
+- This KNN strategy also seems to have heavily outperformed the Dual SMA strategy. Based on the plot and the risk-adjusted metrics, the Machine Learning (KNN) strategy decisively outperformed the Dual SMA strategy across the board. The cumulative returns chart visually demonstrates this outperformance, with the KNN strategy generating vastly more total wealth over the period. Looking at risk-adjusted returns, the KNN model achieved an exceptional Sharpe Ratio of 4.8088, crushing the Dual SMA’s 0.8907. Furthermore, the KNN strategy provided far superior downside protection, limiting its Maximum Drawdown to 37.58%, whereas the Dual SMA strategy suffered a severe 66.49% drawdown. This outperformance likely stems from the fundamental difference in how the models operate. The SMA is a simple trend-following strategy; it is inherently “lagging,” meaning it only reacts after a trend has already started, which often leads to late entries and exits. In contrast, the KNN model is a classification algorithm that attempts to predict future direction based on historical patterns of volatility and lagged returns. By actively classifying periods as “Up” or “Down” based on similar historical environments, the KNN model was able to preemptively shift to cash during high-risk periods, successfully avoiding the deepest drawdowns and preserving capital much more effectively than a lagging indicator.
