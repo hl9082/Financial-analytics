@@ -128,9 +128,15 @@ plot_cum <- data.frame(Date = index(data),
                        Buy_And_Hold = coredata(data$Cum_BnH))
 plot_cum_long <- pivot_longer(plot_cum, cols = -Date, names_to = "Portfolio", values_to = "Value")
 
+# Calculate the maximum y-value so we know how high to draw the chart
+max_y <- ceiling(max(plot_cum_long$Value, na.rm = TRUE))
 ggplot(plot_cum_long, aes(x = Date, y = Value, color = Portfolio)) +
   geom_line(linewidth = 1) +
-  geom_hline(yintercept = 1, linetype = "dashed") +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "black", linewidth = 0.8) +
+   
+  scale_y_continuous(limits = c(0, max_y), breaks = unique(c(0, 1, seq(0, max_y, by = 5)))) +
+  scale_color_manual(values = c("Cum_BnH" = "black", "Cum_Strategy" = "purple"),
+                     labels = c("Cumulative Buy & Hold", "Cumulative Strategy")) +
   labs(title = "Cumulative Returns: Dual SMA Strategy vs. Buy & Hold",
        y = "Value of $1 Investment", x = "Date") +
   theme_minimal()
@@ -246,42 +252,42 @@ head.tail(knn_df[, c("Target", "Position", "Cum_Strategy", "Cum_BnH")])
 ## Evaluate KNN Performance
 - We will now evaluate if the machine learning model managed to outperform both the standard Buy-and-Hold approach and the rigid Dual SMA crossover strategy we built in Part 2.
 ```{r}
+# --- PLOT ---
 plot_knn <- pivot_longer(knn_df[, c("Date", "Cum_Strategy", "Cum_BnH")], 
                          cols = -Date, names_to = "Portfolio", values_to = "Value")
 
-ggplot(plot_knn, aes(x = Date, y = Value, color = Portfolio)) +
+plot(ggplot(plot_knn, aes(x = Date, y = Value, color = Portfolio)) +
   geom_line(linewidth = 1) +
   geom_hline(yintercept = 1, linetype = "dashed") +
   scale_color_manual(values = c("Cum_BnH" = "black", "Cum_Strategy" = "purple"),
                      labels = c("Buy & Hold", "KNN ML Strategy")) +
   labs(title = "Machine Learning (KNN) Strategy vs. Buy & Hold",
        y = "Value of $1 Investment", x = "Date") +
-  theme_minimal()
+  theme_minimal())
 
-# --- CALCULATE PERFORMANCE METRICS ---
-library(PerformanceAnalytics)
-rf_daily <- 0.02 / 252 # Define daily risk-free rate
+# --- METRICS ---
+# Strip all complex formatting to ensure clean numeric and Date data
+safe_dates <- as.Date(as.character(knn_df$Date))
+safe_strat_ret <- as.numeric(knn_df$Strategy_Return)
+safe_bnh_ret <- as.numeric(knn_df$Return)
 
-# Convert standard columns back into time-aware 'xts' objects
-strat_returns_xts <- xts(knn_df$Strategy_Return, order.by = as.Date(knn_df$Date))
-bnh_returns_xts <- xts(knn_df$Return, order.by = as.Date(knn_df$Date))
+# Create the xts objects safely
+strat_returns_xts <- xts(safe_strat_ret, order.by = safe_dates)
+bnh_returns_xts <- xts(safe_bnh_ret, order.by = safe_dates)
 
-# Calculate Sharpe Ratios using the new xts objects
+# Calculate Risk-Free Rate dynamically
+rf_daily <- 0.02 / 252 
+
 knn_sharpe <- SharpeRatio.annualized(strat_returns_xts, Rf = rf_daily)
 bnh_sharpe <- SharpeRatio.annualized(bnh_returns_xts, Rf = rf_daily)
-
-# Calculate Maximum Drawdowns using the new xts objects
 knn_maxdd <- maxDrawdown(strat_returns_xts)
 bnh_maxdd <- maxDrawdown(bnh_returns_xts)
 
-# Print beautifully formatted results
-cat("--- PERFORMANCE EVALUATION: KNN STRATEGY vs BUY & HOLD ---\n")
+cat("--- KNN STRATEGY vs BUY & HOLD ---\n")
 cat(sprintf("KNN Strategy Sharpe Ratio: %.4f\n", knn_sharpe))
 cat(sprintf("Buy & Hold Sharpe Ratio:   %.4f\n\n", bnh_sharpe))
-
 cat(sprintf("KNN Strategy Max Drawdown: %.2f%%\n", knn_maxdd * 100))
 cat(sprintf("Buy & Hold Max Drawdown:   %.2f%%\n", bnh_maxdd * 100))
-
 ```
 
 ## KNN Strategy Analysis
