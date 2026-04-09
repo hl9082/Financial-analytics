@@ -262,6 +262,7 @@ head.tail(knn_df[, c("Target", "Position", "Cum_Strategy", "Cum_BnH")])
 
 ## Evaluate KNN Performance
 - We will now evaluate if the machine learning model managed to outperform both the standard Buy-and-Hold approach and the rigid Dual SMA crossover strategy we built in Part 2.
+a. First, we examine if the machine learning model outperforms the Buy & Hold strategy:
 ```{r}
 # --- PLOT ---
 plot_knn <- pivot_longer(knn_df[, c("Date", "Cum_Strategy", "Cum_BnH")], 
@@ -302,6 +303,32 @@ cat(sprintf("KNN Strategy Sharpe Ratio: %.4f\n", knn_sharpe))
 cat(sprintf("Buy & Hold Sharpe Ratio:   %.4f\n\n", bnh_sharpe))
 cat(sprintf("KNN Strategy Max Drawdown: %.2f%%\n", knn_maxdd * 100))
 cat(sprintf("Buy & Hold Max Drawdown:   %.2f%%\n", bnh_maxdd * 100))
+```
+
+b. Then, we compare the KNN ML strategy with the Dual SMA strategy
+```{r}
+# 1. Extract Date from the xts index, and SMA returns into a normal dataframe
+sma_subset <- data.frame(Date = index(data), Cum_SMA = as.numeric(data$Cum_Strategy))
+
+# 2. Safely merge them based on exact matching dates! 
+combined_df <- merge(knn_df, sma_subset, by = "Date")
+
+# 3. Pivot the new, safely combined dataframe
+plot_knn_sma <- pivot_longer(combined_df[, c("Date", "Cum_Strategy", "Cum_SMA")], 
+                         cols = -Date, names_to = "Portfolio", values_to = "Value")
+
+# 4. Calculate the max height and Plot
+max_y_knn_sma <- ceiling(max(plot_knn_sma$Value, na.rm = TRUE))
+
+plot(ggplot(plot_knn_sma, aes(x = Date, y = Value, color = Portfolio)) +
+  geom_line(linewidth = 1) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  scale_y_continuous(limits = c(0, max_y_knn_sma), breaks = c(1, max_y_knn_sma)) +
+  scale_color_manual(values = c("Cum_SMA" = "blue", "Cum_Strategy" = "purple"),
+                     labels = c("Dual SMA Strategy", "KNN ML Strategy")) +
+  labs(title = "Machine Learning (KNN) Strategy vs. Dual SMA Strategy",
+       y = "Value of $1 Investment", x = "Date") +
+  theme_minimal())
 ```
 
 ## KNN Strategy Analysis
