@@ -1,0 +1,137 @@
+---
+title: "Sentiment analysis to 10-K filings"
+author: "Huy Le"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Introduction
+This document outlines the process of downloading, extracting, and cleaning Item 7 (Management's Discussion & Analysis) from the 10-K filings of five distinct S&P 500 firms for the years 2019 and 2020.
+
+The five selected firms representing different industries are:
+
+Apple Inc. (AAPL) - Technology (CIK: 0000320193)
+
+Johnson & Johnson (JNJ) - Healthcare (CIK: 0000200406)
+
+Exxon Mobil Corp. (XOM) - Energy (CIK: 0000034088)
+
+Walmart Inc. (WMT) - Consumer Staples (CIK: 0000104169)
+
+JPMorgan Chase & Co. (JPM) - Financials (CIK: 0000019617)
+
+1. Load Required Libraries
+We will use edgar for fetching the SEC filings, tm for text mining and corpus creation, and stringr/readr for text manipulation.
+```{r setup}
+# Install packages if not already installed
+# install.packages(c("edgar", "tm", "stringr", "readr", "dplyr"))
+
+library(edgar)
+library(tm)
+library(stringr)
+library(readr)
+library(dplyr)
+```
+
+2. Define Target Firms and Set SEC User Agent
+The SEC strictly requires users to declare their User Agent (Name and Email) to prevent server overload. We will also define our target CIK numbers and the years.
+```{r}
+# SEC EDGAR requires a user agent identifying the scraper
+# Update this with your actual name and email
+Sys.setenv(EDGAR_USER_AGENT = "Your Name your.email@example.com")
+
+# Define the CIKs for AAPL, JNJ, XOM, WMT, and JPM
+target_ciks <- c("320193", "200406", "34088", "104169", "19617")
+
+# Define the target years
+target_years <- c(2019, 2020)
+```
+
+3. Download and Extract MD&A (Item 7)
+The getMgmtDisc function from the edgar package specifically searches for and extracts "Item 7. Management’s Discussion and Analysis of Financial Condition and Results of Operations" from 10-K filings.
+
+Note: This function creates a directory called "MD&A section text" in your working directory and saves the extracted texts as .txt files.
+```{r}
+# Execute the extraction (Set eval=FALSE in chunk options if already downloaded)
+# This will result in 10 text files (5 firms x 2 years)
+getMgmtDisc(cik.no = target_ciks, filing.year = target_years)
+```
+
+4. Load Extracted Texts into R
+After the edgar package downloads and parses the files, we need to read these text files back into R to create our corpus.
+```{r}
+# Define the directory where the edgar package saves the MD&A files
+mda_dir <- "MD&A section text"
+
+# List all text files in the directory
+# Make sure the directory exists and contains our 10 target files
+if(dir.exists(mda_dir)) {
+  file_paths <- list.files(mda_dir, pattern = "\\.txt$", full.names = TRUE)
+  
+  # Read the content of each file into a character vector
+  mda_texts <- sapply(file_paths, function(x) {
+    # Read the file and collapse into a single string
+    text <- read_file(x)
+    return(text)
+  }, USE.NAMES = FALSE)
+  
+  # Create a dataframe to keep track of metadata (using file names)
+  file_names <- basename(file_paths)
+  docs_df <- data.frame(
+    doc_id = file_names,
+    text = mda_texts,
+    stringsAsFactors = FALSE
+  )
+  
+  print(paste("Successfully loaded", nrow(docs_df), "documents."))
+} else {
+  warning("The directory 'MD&A section text' does not exist. Please ensure the download step ran successfully.")
+}
+```
+
+5. Create and Clean the Corpus
+Now we convert the text data into a tm package Volatile Corpus (VCorpus) and apply standard NLP cleaning procedures:
+
+Convert everything to lowercase.
+
+Remove punctuation.
+
+Remove numbers.
+
+Remove standard English stopwords (e.g., "the", "and", "is").
+
+Strip extra whitespace.
+
+```{r}
+# Ensure the dataframe exists before proceeding
+if(exists("docs_df")) {
+  
+  # Convert the dataframe to a tm Corpus
+  mda_corpus <- VCorpus(DataframeSource(docs_df))
+  
+  # Define a custom function to remove special characters if needed
+  removeSpecialChars <- content_transformer(function(x) str_replace_all(x, "[^[:alnum:][:space:]]", " "))
+  
+  # Apply cleaning transformations
+  mda_corpus_clean <- mda_corpus %>%
+    tm_map(content_transformer(tolower)) %>%      # Convert to lower case
+    tm_map(removeSpecialChars) %>%                # Remove special characters
+    tm_map(removePunctuation) %>%                 # Remove punctuation
+    tm_map(removeNumbers) %>%                     # Remove numbers
+    tm_map(removeWords, stopwords("en")) %>%      # Remove standard English stopwords
+    tm_map(stripWhitespace)                       # Remove extra white spaces
+  
+  # Inspect the first document's metadata and a snippet of its clean text
+  print(meta(mda_corpus_clean[[1]]))
+  print(substr(content(mda_corpus_clean[[1]]), 1, 500)) # Print first 500 characters
+  
+}
+```
+
+Conclusion
+The 10 documents have been successfully downloaded, extracted, and processed. The variable mda_corpus_clean now holds the fully cleaned text corpus, which is ready for downstream text analytics tasks such as sentiment analysis, topic modeling (e.g., LDA), or calculating term frequency-inverse document frequency (TF-IDF).
+
