@@ -18,53 +18,113 @@ library(stringr)
 library(ggplot2)
 library(tidyr)
 library(textdata)
+library(jsonlite)
+library(httr)
+library(pdftools) # Added to extract text from downloaded PDFs
 ```
 
 ### 1. Data Acquisition
 We are selecting five major technology firms from the S&P 500: NVIDIA, Alphabet (Google), Amazon, Microsoft, and Apple. We will download Item 7 (MD&A) from their 10-K filings for the years 2019 and 2020.
 
-```{r}
-# Note: eval=FALSE is used here to prevent the API from hitting rate limits 
-# every time the document is knitted. Run this chunk manually to get the data.
+```{r data-acquisition, message=FALSE, warning=FALSE, results='hide'}
 
-# Define the CIK numbers for the 5 companies
-# NVDA: 1045810, GOOG: 1652044, AMZN: 1018724, MSFT: 789019, AAPL: 320193
-ciks <- c("1045810", "1652044", "1018724", "789019", "320193")
-firm_names <- c("NVIDIA", "Alphabet", "Amazon", "Microsoft", "Apple")
+# 1. Define the exact URLs for the 2019 and 2020 10-Ks. 
+# REPLACE the "INSERT_LINK_HERE" placeholders with the direct URLs you found online.
+manual_urls <- data.frame(
+  Firm = c(rep("Johnson & Johnson", 2), rep("Alphabet", 2), rep("Amazon", 2), rep("Microsoft", 2), rep("Apple", 2)),
+  Year = rep(c(2019, 2020), 5),
+  URL = c(
+    "https://d18rn0p25nwr6d.cloudfront.net/CIK-0000200406/2a93c4eb-6024-4a94-805d-ec58a9854eb6.pdf",
+    "https://d18rn0p25nwr6d.cloudfront.net/CIK-0000200406/83b7ebc0-a91e-4e82-acae-997e9234d1ad.pdf",
+    "https://d18rn0p25nwr6d.cloudfront.net/CIK-0001652044/339fead5-9a64-4237-a664-5e0e9f741056.pdf",
+    "https://d18rn0p25nwr6d.cloudfront.net/CIK-0001652044/4707b628-d64b-4673-a5a2-804c0c1773c7.pdf",
+    "https://d18rn0p25nwr6d.cloudfront.net/CIK-0001018724/4d39f579-19d8-4119-b087-ee618abf82d6.pdf",
+    "https://d18rn0p25nwr6d.cloudfront.net/CIK-0001018724/bed19367-fa6b-41ff-a973-df19510b0bba.pdf",
+    "https://microsoft.gcs-web.com/static-files/7c96b326-33bc-4b84-8abb-7afd7a517ea3",
+    "https://microsoft.gcs-web.com/static-files/4e7064ed-bbf7-4140-a8cb-79aba77421b9",
+    "https://d18rn0p25nwr6d.cloudfront.net/CIK-0000320193/1a919118-a594-44f3-92f0-4ecca47b1a7d.pdf",
+    "https://d18rn0p25nwr6d.cloudfront.net/CIK-0000320193/7b5717ca-6222-48e6-801c-9ea28feeef86.pdf"
+  ),
+  stringsAsFactors = FALSE
+)
 
-# Create a mapping dataframe
-firm_map <- data.frame(CIK = ciks, Firm = firm_names)
+# 2. Initialize the empty data frame for the final corpus
+mda_data <- data.frame(Firm = character(), Year = numeric(), Text = character(), stringsAsFactors = FALSE)
 
-# Download MD&A sections for 2019 and 2020
-# The getMgmtDisc function from the edgar package automatically parses Item 7.
-mda_data <- data.frame(CIK = character(), Year = numeric(), Text = character())
-
-for (year in c(2019, 2020)) {
-  for (cik in ciks) {
-    tryCatch({
-      # Fetch the MD&A text
-      text_mda <- edgar::getMgmtDisc(cik, year)
-      
-      if (nrow(text_mda) > 0) {
-        temp_df <- data.frame(
-          CIK = cik,
-          Year = year,
-          Text = text_mda$text.mda[1]
-        )
-        mda_data <- bind_rows(mda_data, temp_df)
-      }
-    }, error = function(e) {
-      message(paste("Error downloading for CIK:", cik, "Year:", year))
-    })
+# 3. Loop through the URLs, download, and extract text
+for (i in 1:nrow(manual_urls)) {
+  firm_name <- manual_urls$Firm[i]
+  doc_year <- manual_urls$Year[i]
+  target_url <- manual_urls$URL[i]
+  
+  cat("\nProcessing", firm_name, "for year", doc_year, "...\n")
+  
+  # Skip if URL is just the placeholder
+  if (grepl("INSERT_", target_url)) {
+    cat("  [!] Skipping: Placeholder URL detected.\n")
+    next
+  }
+  
+  # Determine file extension based on the URL (PDF vs HTML)
+  is_pdf <- grepl("\\.pdf$", tolower(target_url))
+  temp_ext <- ifelse(is_pdf, ".pdf", ".html")
+  temp_file <- paste0("temp_10k_", i, temp_ext)
+  
+  cat("  -> Downloading from direct URL...\n")
+  
+  # Safely download the file. 
+  # method = "wininet" (on Windows) forces the system proxy settings, bypassing the IPv6 bug.
+  # If you are on a Mac, method = "libcurl" is the default fallback.
+  dl_status <- tryCatch({
+    download.file(url = target_url, destfile = temp_file, mode = "wb", 
+                  method = ifelse(.Platform$OS.type == "windows", "wininet", "auto"), quiet = TRUE)
+  }, error = function(e) {
+    cat("  [!] Download failed:", e$message, "\n")
+    return(1) # Return non-zero status on error
+  })
+  
+  if (dl_status == 0) {
+    cat("  [OK] Download successful. Extracting text...\n")
+    
+    # Extract text based on file type
+    clean_text <- ""
+    if (is_pdf) {
+      # Read PDF and collapse pages into one giant string
+      raw_pdf_text <- pdf_text(temp_file)
+      clean_text <- paste(raw_pdf_text, collapse = "\n")
+    } else {
+      # Read HTML
+      raw_html <- read_html(temp_file)
+      clean_text <- html_text(raw_html)
+    }
+    
+    # Extract Item 7 using Regex
+    matches <- str_extract_all(clean_text, "(?i)(?s)Item\\s*7\\.(.*?)(Item\\s*8\\.)")[[1]]
+    
+    if (length(matches) > 0) {
+      mda_text <- matches[which.max(nchar(matches))]
+      cat("  [OK] Successfully isolated Item 7.\n")
+    } else {
+      mda_text <- clean_text 
+      cat("  [!] Could not cleanly isolate Item 7, saving full document text.\n")
+    }
+    
+    # Append to the corpus
+    temp_df <- data.frame(Firm = firm_name, Year = doc_year, Text = mda_text)
+    mda_data <- bind_rows(mda_data, temp_df)
+    
+    # Clean up the temporary file so we don't clutter your hard drive
+    file.remove(temp_file)
+    
+  } else {
+    cat("  [!] Skipping extraction due to download failure.\n")
   }
 }
 
-# Merge with firm names
-mda_corpus <- mda_data %>%
-  left_join(firm_map, by = "CIK")
-
-# Save corpus locally so we don't have to scrape from EDGAR every time
+# 4. Save the successfully downloaded data
+mda_corpus <- mda_data
 saveRDS(mda_corpus, "mda_corpus.rds")
+cat("\nProcess complete. Corpus saved to mda_corpus.rds\n")
 ```
 
 ### 2. Text Cleaning
@@ -76,11 +136,15 @@ We will process the corpus by tokenizing the text, removing standard English sto
 
 # For the sake of a reproducible example in case of EDGAR API downtime, 
 # we create a placeholder dataframe structure:
-mda_corpus <- data.frame(
-  Firm = rep(c("NVIDIA", "Alphabet", "Amazon", "Microsoft", "Apple"), each = 2),
-  Year = rep(c(2019, 2020), times = 5),
-  Text = rep("Placeholder financial text discussing uncertainty, growth, positive revenue, and negative pandemic impacts.", 10)
-)
+
+
+#mda_corpus <- data.frame(
+#  Firm = rep(c("NVIDIA", "Alphabet", "Amazon", "Microsoft", "Apple"), each = 2),
+#  Year = rep(c(2019, 2020), times = 5),
+#  Text = rep("Placeholder financial text discussing uncertainty, growth, positive revenue, and negative pandemic impacts.", 10)
+#)
+
+mda_corpus <- readRDS("mda_corpus.rds")
 
 # Text Preprocessing
 cleaned_tokens <- mda_corpus %>%
@@ -91,7 +155,6 @@ cleaned_tokens <- mda_corpus %>%
   # 3. Removal of numbers and non-informative tokens (punctuation handled by unnest_tokens)
   filter(!str_detect(word, "^[0-9.]+$")) 
 
-head(cleaned_tokens)
 ```
 
 ### 3. Sentiment Counts
@@ -112,7 +175,15 @@ sentiment_counts <- cleaned_tokens %>%
   inner_join(lm_dict, by = "word") %>%
   filter(sentiment %in% c("positive", "negative", "uncertainty")) %>%
   count(Firm, Year, sentiment) %>%
-  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0)
+
+# Safely add columns if they are missing (prevents the rename error)
+if (!"positive" %in% names(sentiment_counts)) sentiment_counts$positive <- 0
+if (!"negative" %in% names(sentiment_counts)) sentiment_counts$negative <- 0
+if (!"uncertainty" %in% names(sentiment_counts)) sentiment_counts$uncertainty <- 0
+
+# Now safely rename
+sentiment_counts <- sentiment_counts %>%
   rename(
     Positive_Words = positive,
     Negative_Words = negative,
