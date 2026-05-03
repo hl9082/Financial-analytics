@@ -29,7 +29,6 @@ We are selecting five major technology firms from the S&P 500: NVIDIA, Alphabet 
 ```{r data-acquisition, message=FALSE, warning=FALSE, results='hide'}
 
 # 1. Define the exact URLs for the 2019 and 2020 10-Ks. 
-# REPLACE the "INSERT_LINK_HERE" placeholders with the direct URLs you found online.
 manual_urls <- data.frame(
   Firm = c(rep("Johnson & Johnson", 2), rep("Alphabet", 2), rep("Amazon", 2), rep("Microsoft", 2), rep("Apple", 2)),
   Year = rep(c(2019, 2020), 5),
@@ -40,8 +39,8 @@ manual_urls <- data.frame(
     "https://d18rn0p25nwr6d.cloudfront.net/CIK-0001652044/4707b628-d64b-4673-a5a2-804c0c1773c7.pdf",
     "https://d18rn0p25nwr6d.cloudfront.net/CIK-0001018724/4d39f579-19d8-4119-b087-ee618abf82d6.pdf",
     "https://d18rn0p25nwr6d.cloudfront.net/CIK-0001018724/bed19367-fa6b-41ff-a973-df19510b0bba.pdf",
-    "https://microsoft.gcs-web.com/static-files/7c96b326-33bc-4b84-8abb-7afd7a517ea3",
-    "https://microsoft.gcs-web.com/static-files/4e7064ed-bbf7-4140-a8cb-79aba77421b9",
+    "https://www.sec.gov/Archives/edgar/data/789019/000156459019027952/msft-10k_20190630.htm", # Official SEC EDGAR 2019
+    "https://www.sec.gov/Archives/edgar/data/789019/000156459020034944/msft-10k_20200630.htm", # Official SEC EDGAR 2020
     "https://d18rn0p25nwr6d.cloudfront.net/CIK-0000320193/1a919118-a594-44f3-92f0-4ecca47b1a7d.pdf",
     "https://d18rn0p25nwr6d.cloudfront.net/CIK-0000320193/7b5717ca-6222-48e6-801c-9ea28feeef86.pdf"
   ),
@@ -66,8 +65,8 @@ for (i in 1:nrow(manual_urls)) {
   }
   
   # Determine file extension based on the URL (PDF vs HTML)
-  is_pdf <- grepl("\\.pdf$", tolower(target_url))
-  temp_ext <- ifelse(is_pdf, ".pdf", ".html")
+  is_pdf <- grepl("\\.pdf$", tolower(target_url)) 
+  temp_ext <- ifelse(is_pdf, ".pdf", ".htm")
   temp_file <- paste0("temp_10k_", i, temp_ext)
   
   cat("  -> Downloading from direct URL...\n")
@@ -75,12 +74,23 @@ for (i in 1:nrow(manual_urls)) {
   # Safely download the file. 
   # method = "wininet" (on Windows) forces the system proxy settings, bypassing the IPv6 bug.
   # If you are on a Mac, method = "libcurl" is the default fallback.
-  dl_status <- tryCatch({
-    download.file(url = target_url, destfile = temp_file, mode = "wb", 
-                  method = ifelse(.Platform$OS.type == "windows", "wininet", "auto"), quiet = TRUE)
+dl_status <- tryCatch({
+    USER_AGENT <- "RIT Student Huy Le hl9082@g.rit.edu"
+    
+    # GET request passing your identity, saving directly to the temp file
+    req <- GET(target_url, 
+               add_headers("User-Agent" = USER_AGENT), 
+               write_disk(temp_file, overwrite = TRUE))
+    
+    if (req$status_code == 200) {
+      0 # 0 means success
+    } else {
+      cat("  [!] HTTP Error:", req$status_code, "\n")
+      1 # 1 means failure
+    }
   }, error = function(e) {
-    cat("  [!] Download failed:", e$message, "\n")
-    return(1) # Return non-zero status on error
+    cat("  [!] Request failed:", e$message, "\n")
+    return(1)
   })
   
   if (dl_status == 0) {
@@ -94,8 +104,8 @@ for (i in 1:nrow(manual_urls)) {
       clean_text <- paste(raw_pdf_text, collapse = "\n")
     } else {
       # Read HTML
-      raw_html <- read_html(temp_file)
-      clean_text <- html_text(raw_html)
+      raw_html <- rvest::read_html(temp_file)
+      clean_text <- rvest::html_text(raw_html)
     }
     
     # Extract Item 7 using Regex
@@ -133,16 +143,6 @@ We will process the corpus by tokenizing the text, removing standard English sto
 # Load the corpus (Assuming the previous chunk was run and saved)
 # If running for the first time, you must run the data acquisition chunk first.
 # mda_corpus <- readRDS("mda_corpus.rds")
-
-# For the sake of a reproducible example in case of EDGAR API downtime, 
-# we create a placeholder dataframe structure:
-
-
-#mda_corpus <- data.frame(
-#  Firm = rep(c("NVIDIA", "Alphabet", "Amazon", "Microsoft", "Apple"), each = 2),
-#  Year = rep(c(2019, 2020), times = 5),
-#  Text = rep("Placeholder financial text discussing uncertainty, growth, positive revenue, and negative pandemic impacts.", 10)
-#)
 
 mda_corpus <- readRDS("mda_corpus.rds")
 
@@ -201,8 +201,13 @@ knitr::kable(firm_year_metrics, caption = "Loughran-McDonald Sentiment Word Coun
 
 ### 4. Sentiment Normalization
 We normalize the raw counts by the total number of words to control for the length of the MD&A document.
+
+
 The formulas applied are:
-$Tone = \frac{Positive Words - Negative Words}{Total Words}$
+
+
+$Tone = \frac{Positive Words - Negative Words}{Total Words}$  
+
 $Uncertainty = \frac{Uncertainty Words}{Total Words}$
 ```{r}
 normalized_metrics <- firm_year_metrics %>%
@@ -218,15 +223,24 @@ knitr::kable(normalized_metrics %>% select(Firm, Year, Tone, Uncertainty),
 
 ### 5. Analysis and Interpretation
 Q1. What is unique about the MD&A section in a 10-K filing, and why do people tend to analyze it in textual analysis instead of the entire 10-K filing?
+
 The Management's Discussion and Analysis (MD&A) section is unique because it provides the qualitative narrative behind the quantitative financial statements. Unlike the rest of the 10-K, which is heavily boiler-plated and dominated by strict GAAP accounting tables, the MD&A represents management's perspective. It discusses current operations, future outlooks, liquidity, and known risk factors. Financial analysts and researchers isolate Item 7 because it contains the highest density of forward-looking statements and sentiment. Analyzing the entire 10-K dilutes the sentiment signal with legally mandated boilerplate text (like exhibits and properties).
 
 Q2. For 2020, which company exhibits the most negative tone? Is this consistent with your expectations? Explain why.
-(Note to student: Base your final answer on the actual output of your knitted normalized_metrics dataframe. Below is an example of standard analytical reasoning assuming standard 2020 tech trends).
 
-Based on standard text analysis of 2020 filings, we typically see heavily depressed tone scores across the board due to the onset of the COVID-19 pandemic. If Apple or Amazon exhibits the most negative tone, it aligns with expectations. While these companies performed well financially, their MD&A sections were flooded with mandatory risk disclosures regarding supply chain disruptions, warehouse logistics delays, and macroeconomic closures. A negative tone in financial text often reflects cautious risk-disclosure rather than poor financial performance; management is legally required to outline all worst-case scenarios related to the pandemic.
+- Johnson & Johnson exhibits the most negative tone for the year 2020.
+- Looking at the "Tone" column for 2020, Johnson & Johnson has a score of -0.0262021, which is the lowest (most negative) value among all five firms. For comparison, Apple is the second most negative at -0.0192490, while Microsoft is the least negative at -0.0003555.
+- This is highly consistent with expectations for the year 2020, especially given the context of textual analysis in financial filings. Here's why:
+
+  * Industry Context (Healthcare vs. Tech during COVID-19): 2020 was the onset of the global COVID-19 pandemic. While tech companies like Microsoft and Amazon thrived as the world transitioned to remote work and e-commerce, Johnson & Johnson was on the front lines of the healthcare crisis. They were rapidly researching and developing a COVID-19 vaccine, which introduced unprecedented operational, regulatory, and clinical trial risks that had to be disclosed.
+
+  * The Nature of Financial "Negative" Tone: Using the Loughran-McDonald dictionary, a negative tone in an MD&A section doesn't necessarily mean the company is failing financially; it usually reflects heavy risk disclosure and liability. Pharmaceutical companies inherently carry massive regulatory burdens, patent risks, and litigation risks (such as J&J's ongoing talc and opioid lawsuits at the time).
+
+  * The Contrast: Tech firms like Alphabet and Microsoft have negative scores (because 10-K filings are legally required to list worst-case scenarios), but their scores are much closer to zero. Johnson & Johnson's significantly lower score reflects the compounded negative terminology required when a massive healthcare conglomerate navigates both its standard legal liabilities and a once-in-a-century global pandemic.
 
 Q3. Plot the uncertainty scores for all five firms in both 2019 and 2020 on the same graph. Identify which firm experienced the largest change in uncertainty between 2019 and 2020.
 ```{r}
+# Plotting uncertainty scores
 # Plotting uncertainty scores
 ggplot(normalized_metrics, aes(x = Firm, y = Uncertainty, fill = as.factor(Year))) +
   geom_col(position = "dodge", color = "black") +
@@ -239,18 +253,51 @@ ggplot(normalized_metrics, aes(x = Firm, y = Uncertainty, fill = as.factor(Year)
   ) +
   scale_fill_manual(values = c("#2c3e50", "#e74c3c"))
 
-# Calculating the largest change in uncertainty
+# Safely calculate the largest change in uncertainty
 uncertainty_change <- normalized_metrics %>%
   select(Firm, Year, Uncertainty) %>%
-  pivot_wider(names_from = Year, values_from = Uncertainty, names_prefix = "Year_") %>%
-  mutate(Change = abs(Year_2020 - Year_2019)) %>%
-  arrange(desc(Change))
+  # Explicitly create the string prefix BEFORE pivoting to avoid tidyr bugs
+  mutate(Year = paste0("Year_", Year)) %>% 
+  pivot_wider(names_from = Year, values_from = Uncertainty)
 
-largest_change_firm <- uncertainty_change$Firm[1]
-cat("The firm that experienced the largest change in uncertainty was:", largest_change_firm, "\n")
+# Failsafe: Check if BOTH columns exist before attempting the math
+if ("Year_2019" %in% names(uncertainty_change) && "Year_2020" %in% names(uncertainty_change)) {
+  
+  uncertainty_change <- uncertainty_change %>%
+    mutate(Change = abs(Year_2020 - Year_2019)) %>%
+    arrange(desc(Change))
+  
+  largest_change_firm <- uncertainty_change$Firm[1]
+  cat("The firm that experienced the largest change in uncertainty was:", largest_change_firm, "\n")
+  
+} else {
+  # If a year is missing, the document will still Knit and print this helpful warning instead of crashing.
+  cat("[!] Cannot calculate change: Missing data for either 2019 or 2020.\n")
+  cat("Currently available columns are:", paste(names(uncertainty_change), collapse = ", "), "\n")
+}
 ```
 
 Q4. Do your results in the previous question align with your expectations about firm behavior during this period? Discuss whether the sentiment measures effectively capture tone and uncertainty.
-Yes, the results align strongly with expectations. The leap from 2019 to 2020 encompasses the outbreak of the global COVID-19 pandemic. We expect to see a significant spike in uncertainty words (e.g., "fluctuate", "contingent", "unknown", "depend") across all five S&P 500 tech firms as they grappled with unprecedented global lockdowns.
 
-The Loughran-McDonald sentiment measures effectively capture this because they are specifically calibrated to avoid misclassifying standard business terminology. (For example, "liability" or "tax" are negative in standard English dictionaries but neutral in finance). By normalizing these counts against the total word count, we effectively control for management teams that simply wrote longer MD&A sections in 2020 to cover pandemic protocols, proving that textual analysis is a reliable proxy for measuring corporate sentiment and risk awareness.
+Surprisingly, no, they do not align with the basic expectation of a massive spike in uncertainty. Given that 2020 was the year of the unprecedented COVID-19 global lockdowns, one would naturally expect a dramatic leap in uncertainty scores across the board. However, looking at my bar chart, the changes between 2019 and 2020 are remarkably flat.
+
+- Alphabet, J&J, and Microsoft show only a microscopic increase in their uncertainty scores.
+
+- Apple and Amazon actually show a slight decrease in their normalized uncertainty scores.
+
+This actually perfectly aligns with the nuanced reality of these specific mega-cap companies. The five firms you selected were uniquely positioned to not just survive, but thrive during the pandemic.
+
+- Tech Tailwinds: Amazon (e-commerce/AWS), Microsoft (cloud/remote work via Teams), Alphabet, and Apple saw massive surges in demand as the world shifted online.
+
+- Healthcare Demand: Johnson & Johnson was central to the pandemic response.
+Because their core business models were perfectly suited for the lockdown environment, their management teams were likely much less "uncertain" about their future revenue streams than companies in devastated sectors like airlines, hospitality, or brick-and-mortar retail.
+
+This leads to a great discussion on the limitations of textual analysis. You can argue that while the Loughran-McDonald (LM) dictionary is the gold standard, it has blind spots:
+
+- The "Boilerplate" Problem: 10-K filings are heavily vetted by corporate lawyers. To protect themselves from lawsuits, companies maintain a very high baseline of risk and uncertainty disclosures every single year, regardless of the actual economic climate. Lawyers often copy-paste these standard risk paragraphs year over year, which mutes the variation in my scores.
+
+- Lack of Context (Bag-of-Words limitation): The LM dictionary counts individual words but doesn't understand context. If a company writes, "We have successfully eliminated the uncertainty regarding our supply chain," the algorithm still counts "uncertainty" as a point toward the uncertainty score, even though the sentence is actually conveying confidence.
+
+- Document Length: As seen in my raw data table, the total word counts for the MD&A sections didn't drastically change (and for Apple, J&J, and Alphabet, the word count actually dropped in 2020). Because I correctly normalized the data, the density of uncertain words remained flat.
+
+In conclusion, while the LM dictionary effectively captures the baseline legal conservatism of corporate filings, simple word-count frequencies may not be sensitive enough to capture real-time management panic, especially for mega-cap firms whose operations were insulated from the worst of the 2020 economic shock.
